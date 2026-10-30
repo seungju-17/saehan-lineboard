@@ -71,7 +71,10 @@ export function ensureBoard(date: string, shift: Shift, factoryId: number, db: D
       FROM board_posts bp JOIN posts po ON po.id=bp.post_id WHERE bp.board_id=?`).run(id, latest.id);
     db.prepare(`INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source) SELECT ?, a.post_id, a.person_id, '복사' FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? AND p.work_type='교대'`).run(id, src.id);
     db.prepare(`INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source) SELECT ?, a.post_id, a.person_id, '복사' FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? AND p.work_type<>'교대'`).run(id, latest.id);
-    // 필요 인원 = 복사돼 들어온 인원. 복사된 사람이 없는 자리는 지난 표의 필요 인원을 그대로 둔다.
+    // 사람이 복사되지 않은 유인 라인은 오늘 안 돌리는 것으로 보고 제품도 비운다 (제품은 최근 표, 사람은 같은 조 표에서 오므로 어긋날 수 있다)
+    db.prepare(`UPDATE board_posts SET product=NULL, need=NULL WHERE board_id=? AND post_id IN (SELECT po.id FROM posts po WHERE po.kind='machine' AND po.unmanned=0)
+      AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id)`).run(id);
+    // 필요 인원 = 복사돼 들어온 인원
     db.prepare('INSERT OR IGNORE INTO board_posts (board_id, post_id) SELECT DISTINCT ?, post_id FROM assignments WHERE board_id=?').run(id, id);
     db.prepare('UPDATE board_posts SET need=COALESCE(NULLIF((SELECT COUNT(*) FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id), 0), need) WHERE board_id=?').run(id);
     db.prepare("INSERT INTO logs (board_id, action, detail) VALUES (?, '복사', ?)").run(id, src.id === latest.id ? src.date : `교대 ${src.date} · 그 외 ${latest.date}`);

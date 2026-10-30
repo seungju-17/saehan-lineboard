@@ -76,6 +76,20 @@ describe('빈 자리 판정', () => {
     p = getBoard('2026-10-21', '주간', 2, db2).posts.find((x) => x.code === 'S-3')!;
     expect(p.stopped).toBe(0); expect(isVacantPost(p, 0)).toBe(true);
   });
+  it('제품은 최근 표에서, 사람은 같은 조 표에서 오더라도 사람이 없는 라인은 제품을 비워 빈 자리가 생기지 않는다', () => {
+    const db = memDb();
+    // 10-20(화) 주간 A조: S-3 박현주. 10-13(화)도 A조 주간이지만 그날은 S-3를 안 돌렸고 10-16(금, B조 주간)에 S-3를 돌렸다고 하자.
+    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (5,'2026-10-19','주간',2,'확정')").run(); // 월, 최근 표
+    db.prepare("INSERT INTO board_posts (board_id, post_id, product) VALUES (5,36,'생수900')").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (5,36,2,'이력')").run();
+    db.prepare("DELETE FROM assignments WHERE board_id=1 AND post_id=36").run(); // 같은 조 표(10-20)에는 S-3 사람 없음
+    db.prepare("UPDATE boards SET date='2026-10-21' WHERE id=5").run(); // 최근 표를 10-21로, 오늘은 10-22
+    const b = getBoard('2026-10-22', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    const cnt = b.assignments.filter((a) => a.post_id === s3.id).length;
+    expect(isVacantPost(s3, cnt)).toBe(false);
+    if (cnt === 0) expect(s3.product).toBeNull();
+  });
   it('안 돌린 라인(사람 없음·부동)의 제품은 다음 표로 복사되지 않고, 무인 라인 제품은 복사된다', () => {
     const db = memDb();
     db.prepare("INSERT INTO board_posts (board_id, post_id, product, stopped) VALUES (1,44,NULL,0)").run();
