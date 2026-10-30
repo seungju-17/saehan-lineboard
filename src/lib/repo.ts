@@ -137,16 +137,17 @@ export function setNote(boardId: number, note: string | null, db: DB = getDb()):
   db.prepare('UPDATE boards SET note=? WHERE id=?').run(note && note.trim() ? note.trim() : null, boardId);
 }
 /** 근태 표시. 결근은 자리를 비우고 대체 요청, 연차·병가는 자리만 비움, 반차·지각·조퇴·교육은 기록만. kind=null 이면 지움. */
-export function setAttendance(boardId: number, postId: number | null, personId: number, kind: AttendanceKind | null, note: string | null, db: DB = getDb()): { sent: number } {
+export type SendResult = { sent: number; candidates: { name: string; reasons: string[] }[] };
+export function setAttendance(boardId: number, postId: number | null, personId: number, kind: AttendanceKind | null, note: string | null, db: DB = getDb()): SendResult {
   const b = db.prepare('SELECT date, shift FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift };
-  if (!kind) { db.prepare('DELETE FROM attendance WHERE date=? AND shift=? AND person_id=?').run(b.date, b.shift, personId); return { sent: 0 }; }
+  if (!kind) { db.prepare('DELETE FROM attendance WHERE date=? AND shift=? AND person_id=?').run(b.date, b.shift, personId); return { sent: 0, candidates: [] }; }
   db.prepare('INSERT INTO attendance (date, shift, person_id, kind, note) VALUES (?,?,?,?,?) ON CONFLICT(date, shift, person_id) DO UPDATE SET kind=excluded.kind, note=excluded.note').run(b.date, b.shift, personId, kind, note);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action, detail) VALUES (?,?,?,'근태',?)").run(boardId, postId, personId, kind);
   if (postId && (kind === '결근' || kind === '연차' || kind === '병가')) {
     removePerson(boardId, postId, personId, true, db);
     if (kind === '결근') return sendRequests(boardId, postId, personId, db);
   }
-  return { sent: 0 };
+  return { sent: 0, candidates: [] };
 }
 /** 2공장 결재: 입안(반장) → 결정(팀장=확정). */
 export function proposeBoard(boardId: number, db: DB = getDb()): void {
@@ -176,7 +177,19 @@ export function clearVacancy(boardId: number, postId: number, db: DB = getDb()):
   db.prepare("UPDATE requests SET status='취소', responded_at=datetime('now','localtime') WHERE board_id=? AND post_id=? AND status='발송'").run(boardId, postId);
 }
 
-export function sendRequests(boardId: number, postId: number, vacatedId: number | null, db: DB = getDb()): { sent: number; candidates: { name: string; reasons: string[] }[] } {
+/** 보낸 요청 거두기. 자리는 그대로 비워 둔다. requestId를 주면 그 한 명만. */
+export function cancelRequests(boardId: number, postId: number, requestId: number | null, db: DB = getDb()): { cancelled: number } {
+  const rows = db.prepare(`SELECT r.id, r.person_id, b.date, b.shift, b.factory_id, po.name AS post_name, bp.product FROM requests r JOIN boards b ON b.id=r.board_id JOIN posts po ON po.id=r.post_id
+    LEFT JOIN board_posts bp ON bp.board_id=r.board_id AND bp.post_id=r.post_id WHERE r.board_id=? AND r.post_id=? AND r.status='발송' ${requestId ? 'AND r.id=?' : ''}`).all(...(requestId ? [boardId, postId, requestId] : [boardId, postId])) as { id: number; person_id: number; date: string; shift: Shift; factory_id: number; post_name: string; product: string | null }[];
+  for (const r of rows) {
+    db.prepare("UPDATE requests SET status='취소', responded_at=datetime('now','localtime') WHERE id=?").run(r.id);
+    sendMessage(r.person_id, '요청', `[대체 요청 취소] ${+r.date.slice(5, 7)}/${+r.date.slice(8, 10)} ${r.shift} ${factoryName(r.factory_id, db)} ${r.post_name}${r.product ? ' ' + r.product : ''} — 이 요청은 취소되었습니다. 응답하지 않으셔도 됩니다.`, null, db);
+  }
+  if (rows.length) db.prepare("INSERT INTO logs (board_id, post_id, action, detail) VALUES (?,?,'요청취소',?)").run(boardId, postId, `${rows.length}명`);
+  return { cancelled: rows.length };
+}
+
+export function sendRequests(boardId: number, postId: number, vacatedId: number | null, db: DB = getDb()): SendResult {
   const b = db.prepare('SELECT date, shift, factory_id, status FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift; factory_id: number; status: string };
   const post = db.prepare('SELECT code, name FROM posts WHERE id=?').get(postId) as { code: string; name: string };
   const product = (db.prepare('SELECT product FROM board_posts WHERE board_id=? AND post_id=?').get(boardId, postId) as { product: string | null } | undefined)?.product ?? null;
@@ -198,10 +211,10 @@ export function sendRequests(boardId: number, postId: number, vacatedId: number 
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action, detail) VALUES (?,?,?,'대체요청',?)").run(boardId, postId, vacatedId, `${ranked.length}명`);
   return { sent: ranked.length, candidates: ranked.map((c) => ({ name: c.name, reasons: c.reasons })) };
 }
-export function nextCandidates(boardId: number, postId: number, db: DB = getDb()): { sent: number } {
+export function nextCandidates(boardId: number, postId: number, db: DB = getDb()): SendResult {
   db.prepare("UPDATE requests SET status='만료', responded_at=datetime('now','localtime') WHERE board_id=? AND post_id=? AND status='발송'").run(boardId, postId);
   const v = db.prepare('SELECT vacated_person_id FROM requests WHERE board_id=? AND post_id=? LIMIT 1').get(boardId, postId) as { vacated_person_id: number | null } | undefined;
-  return { sent: sendRequests(boardId, postId, v?.vacated_person_id ?? null, db).sent };
+  return sendRequests(boardId, postId, v?.vacated_person_id ?? null, db);
 }
 export function expireDue(db: DB = getDb()): void {
   db.prepare("UPDATE requests SET status='만료', responded_at=datetime('now','localtime') WHERE status='발송' AND expires_at < datetime('now')").run();
@@ -220,7 +233,9 @@ export function respond(tok: string, action: 'accept' | 'decline', db: DB = getD
   const taken = db.prepare("SELECT 1 FROM requests WHERE board_id=? AND post_id=? AND status='수락'").get(r.board_id, r.post_id);
   if (taken) { db.prepare(`UPDATE requests SET status='만료', responded_at=${now} WHERE id=?`).run(r.id); return { ok: false, message: '다른 분이 먼저 수락했습니다' }; }
   db.prepare(`UPDATE requests SET status='수락', responded_at=${now} WHERE id=?`).run(r.id);
+  const others = db.prepare("SELECT person_id FROM requests WHERE board_id=? AND post_id=? AND status='발송'").all(r.board_id, r.post_id) as { person_id: number }[];
   db.prepare(`UPDATE requests SET status='만료', responded_at=${now} WHERE board_id=? AND post_id=? AND status='발송'`).run(r.board_id, r.post_id);
+  for (const o of others) sendMessage(o.person_id, '요청', `[대체 요청 마감] ${+r.date.slice(5, 7)}/${+r.date.slice(8, 10)} ${r.shift} ${r.post_name} — 다른 분이 먼저 수락했습니다. 감사합니다.`, null, db);
   addPerson(r.board_id, r.post_id, r.person_id, '대체', db);
   const b = db.prepare('SELECT date, shift, factory_id, status FROM boards WHERE id=?').get(r.board_id) as { date: string; shift: Shift; factory_id: number; status: string };
   if (b.status === '확정') {

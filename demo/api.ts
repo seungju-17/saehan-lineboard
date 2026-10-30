@@ -1,6 +1,6 @@
 /* 브라우저 판: /api/* 호출을 서버 없이 repo 함수로 바로 연결한다. src/app/api/* 와 같은 동작. */
 import { getDb } from './db-shim';
-import { type AttendanceKind, addPerson, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, myWork, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
+import { type AttendanceKind, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, myWork, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
 import { currentShiftSeoul, todaySeoul, type Shift } from '../src/lib/shift';
 import { getStats } from '../src/lib/stats';
 import { ask, makeClient, explainApiError, type ChatMessage } from '../src/lib/assistant';
@@ -29,6 +29,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
         case 'send': extra = sendRequests(board.id, postId, null); break;
         case 'next': extra = nextCandidates(board.id, postId); break;
         case 'cancel': clearVacancy(board.id, postId); break;
+        case 'cancel_requests': extra = cancelRequests(board.id, postId, body.requestId ? Number(body.requestId) : null); break;
         case 'stop': setStopped(board.id, postId, !!body.stopped); break;
         case 'note': setNote(board.id, (body.note as string | null) ?? null); break;
         case 'attend': extra = setAttendance(board.id, body.postId ? postId : null, personId, (body.kind as AttendanceKind | null) ?? null, (body.note as string | null) ?? null); break;

@@ -12,8 +12,8 @@ export function Requests({ initial }: { initial: RequestRow[] }): React.ReactEle
   const list = [...groups.values()];
   const openCount = list.filter((l) => !l.some((r) => r.status === '수락') && l.some((r) => r.status === '발송')).length;
 
-  async function act(r: RequestRow, action: 'next' | 'cancel'): Promise<void> {
-    await fetch('/api/board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: r.date, shift: r.shift, factory: r.factory_id, action, postId: r.post_id }) });
+  async function act(r: RequestRow, action: 'next' | 'cancel' | 'cancel_requests', requestId?: number): Promise<void> {
+    await fetch('/api/board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: r.date, shift: r.shift, factory: r.factory_id, action, postId: r.post_id, requestId }) });
     setRows(await (await fetch('/api/requests')).json());
   }
 
@@ -41,7 +41,8 @@ export function Requests({ initial }: { initial: RequestRow[] }): React.ReactEle
                     : <span className="text-sm font-semibold text-vac bg-vac-bg px-2 h-6 inline-flex items-center rounded">미충원</span>}
                   {!accepted && <span className="ml-auto flex gap-1.5">
                     <button onClick={() => act(f, 'next')} className="h-8 px-3 rounded-md border border-line text-sm font-medium hover:border-ink-3">다음 후보에게</button>
-                    {open.length > 0 && <button onClick={() => act(f, 'cancel')} className="h-8 px-2.5 rounded-md text-sm text-ink-3 hover:bg-ground">취소</button>}
+                    {open.length > 0 && <button onClick={() => act(f, 'cancel_requests')} className="h-8 px-2.5 rounded-md text-sm text-ink-3 hover:bg-ground">요청 취소</button>}
+                    <button onClick={() => act(f, 'cancel')} className="h-8 px-2.5 rounded-md text-sm text-ink-3 hover:bg-ground">자리 닫기</button>
                   </span>}
                 </div>
                 <ul className="px-5 py-2 divide-y divide-line-2">
@@ -53,6 +54,7 @@ export function Requests({ initial }: { initial: RequestRow[] }): React.ReactEle
                       <span className="text-sm text-ink-3 truncate">{r.reason}</span>
                       <span className="ml-auto text-xs text-ink-3 shrink-0">{r.sent_at.slice(11, 16)}{r.responded_at ? ` → ${r.responded_at.slice(11, 16)}` : ''}</span>
                       {r.status === '발송' && <a href={`/r/${r.token}`} target="_blank" rel="noreferrer" className="text-xs text-ink-2 underline shrink-0">수락 화면</a>}
+                      {r.status === '발송' && <button onClick={() => act(r, 'cancel_requests', r.id)} className="text-xs text-ink-3 hover:text-vac shrink-0">취소</button>}
                     </li>
                   ))}
                 </ul>

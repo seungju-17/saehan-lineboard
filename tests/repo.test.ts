@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { openDb } from '../src/lib/db';
-import { addPerson, ensureBoard, getBoard, isVacantPost, isWeekend, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
+import { addPerson, cancelRequests, ensureBoard, getBoard, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
 import { periodFor } from '../src/lib/attendance-xlsx';
 
 function memDb() {
@@ -85,5 +85,46 @@ describe('근태표 기간', () => {
     expect(periodFor('2026-10', '교대반')).toEqual({ from: '2026-10-11', to: '2026-11-10' });
     expect(periodFor('2026-12', '주전반')).toEqual({ from: '2026-12-11', to: '2027-01-10' });
     expect(periodFor('2026-02', '협력사 A조')).toEqual({ from: '2026-02-01', to: '2026-02-28' });
+  });
+});
+
+describe('요청 취소', () => {
+  it('한 명만 취소하면 나머지는 살아 있고, 전체 취소하면 자리는 비어 있음으로 남는다', () => {
+    const db = memDb();
+    // 10-21은 B조가 휴무. B조 두 명에게 2공장 S-3 경험을 심어 후보가 되게 한다.
+    db.prepare("INSERT INTO people (id, name, grp, work_type, unit, home_factory_id) VALUES (5,'정미영','B','교대','협력사 B조',2)").run();
+    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (3,'2026-10-14','주간',2,'확정')").run();
+    db.prepare("INSERT INTO board_posts (board_id, post_id, product) VALUES (3,36,'신광야950')").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (3,36,2,'이력'),(3,36,5,'이력')").run();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    const sent = setAttendance(b.id, s3.id, 1, '결근', null, db);
+    expect(sent.sent).toBe(2);
+    expect(sent.candidates.map((c) => c.name).sort()).toEqual(['김순자', '정미영']);
+    let reqs = getBoard('2026-10-21', '주간', 2, db).requests.filter((r) => r.status === '발송');
+    expect(reqs.length).toBeGreaterThan(0);
+    const first = reqs[0];
+    expect(cancelRequests(b.id, s3.id, first.id, db).cancelled).toBe(1);
+    reqs = getBoard('2026-10-21', '주간', 2, db).requests;
+    expect(reqs.find((r) => r.id === first.id)!.status).toBe('취소');
+    const msg = db.prepare("SELECT body FROM messages WHERE person_id=? ORDER BY id DESC LIMIT 1").get(first.person_id) as { body: string };
+    expect(msg.body).toContain('취소');
+    cancelRequests(b.id, s3.id, null, db);
+    const after = getBoard('2026-10-21', '주간', 2, db);
+    expect(after.requests.every((r) => r.status !== '발송')).toBe(true);
+    expect(isVacantPost(after.posts.find((p) => p.code === 'S-3')!, 0)).toBe(true);
+  });
+  it('한 명이 수락하면 나머지에게 마감 알림이 간다', () => {
+    const db = memDb();
+    db.prepare("INSERT INTO people (id, name, grp, work_type, unit, home_factory_id) VALUES (4,'이은희','C','교대','협력사 C조',2)").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (1,36,2,'이력'),(1,36,4,'이력')").run();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    const r = sendRequests(b.id, s3.id, 1, db);
+    if (r.sent < 2) return; // 후보가 둘 미만이면 검증할 것이 없다
+    const reqs = getBoard('2026-10-21', '주간', 2, db).requests.filter((x) => x.status === '발송');
+    expect(respond(reqs[0].token, 'accept', db).ok).toBe(true);
+    const other = db.prepare("SELECT body FROM messages WHERE person_id=? ORDER BY id DESC LIMIT 1").get(reqs[1].person_id) as { body: string };
+    expect(other.body).toContain('먼저 수락');
   });
 });

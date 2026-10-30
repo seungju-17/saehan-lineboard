@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { type AttendanceKind, addPerson, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, nextCandidates, removePerson, sendRequests, setProduct, unconfirmBoard, autoFill } from '@/lib/repo';
+import { type AttendanceKind, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, nextCandidates, removePerson, sendRequests, setProduct, unconfirmBoard, autoFill } from '@/lib/repo';
 import type { Shift } from '@/lib/shift';
 
 type Key = { date: string; shift: Shift; factory: number };
@@ -24,6 +24,7 @@ type Action =
   | { action: 'send'; postId: number }
   | { action: 'next'; postId: number }
   | { action: 'cancel'; postId: number }
+  | { action: 'cancel_requests'; postId: number; requestId?: number }
   | { action: 'stop'; postId: number; stopped: boolean }
   | { action: 'note'; note: string | null }
   | { action: 'attend'; postId: number | null; personId: number; kind: AttendanceKind | null; note?: string | null }
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       case 'send': extra = sendRequests(board.id, body.postId, null); break;
       case 'next': extra = nextCandidates(board.id, body.postId); break;
       case 'cancel': clearVacancy(board.id, body.postId); break;
+      case 'cancel_requests': extra = cancelRequests(board.id, body.postId, body.requestId ?? null); break;
       case 'stop': setStopped(board.id, body.postId, !!body.stopped); break;
       case 'note': setNote(board.id, body.note ?? null); break;
       case 'attend': extra = setAttendance(board.id, body.postId ?? null, body.personId, body.kind ?? null, body.note ?? null); break;

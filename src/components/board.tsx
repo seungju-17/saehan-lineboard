@@ -1,6 +1,6 @@
 'use client';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ATTENDANCE_KINDS, isVacantPost, type AttendanceKind, type Board as BoardT, type RequestRow } from '@/lib/repo';
+import { ATTENDANCE_KINDS, isVacantPost, type AttendanceKind, type Board as BoardT, type RequestRow, type SendResult } from '@/lib/repo';
 import { addDays, currentShiftSeoul, fmtKo, fmtShort, groupsOn, todaySeoul, type Shift } from '@/lib/shift';
 import { ask } from '@/lib/ask';
 
@@ -38,7 +38,9 @@ export function Board(): React.ReactElement {
   }, [q]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- 조회 결과 반영
   useEffect(() => { load(); setPop(null); setNoteEdit(false); }, [load]);
-  useEffect(() => { if (!flash) return; const t = setTimeout(() => setFlash(null), 2500); return () => clearTimeout(t); }, [flash]);
+  useEffect(() => { if (!flash) return; const t = setTimeout(() => setFlash(null), flash.length > 40 ? 5000 : 2500); return () => clearTimeout(t); }, [flash]);
+  // 요청을 보낸 뒤 자동으로 열리는 말풍선이 화면 밖이면 보이게 끌어온다
+  useEffect(() => { if (pop?.kind === 'vacancy') popRef.current?.scrollIntoView({ block: 'nearest' }); }, [pop]);
   useEffect(() => {
     function onDoc(e: MouseEvent): void { if (popRef.current && !popRef.current.contains(e.target as Node)) setPop(null); }
     function onKey(e: KeyboardEvent): void { if (e.key === 'Escape') setPop(null); }
@@ -94,14 +96,21 @@ export function Board(): React.ReactElement {
     const d = await act({ action: 'confirm' });
     if (d) setFlash(`${twoStep ? '결정' : '확정'}했습니다 · 알림 ${(d as BoardT & { notified: number }).notified}건`);
   }
+  /** 요청을 보낸 뒤: 누구에게 갔는지 띄우고, 그 자리 말풍선을 열어 한 명씩 취소할 수 있게 한다. */
+  function afterSend(p: PostT, d: BoardT, prefix = ''): void {
+    const r = d as BoardT & SendResult;
+    const names = (r.candidates ?? []).map((c) => c.name);
+    if (names.length === 0) { setFlash(`${prefix}보낼 후보가 없습니다. 직접 넣거나 라인을 부동 처리하세요.`); setPop({ kind: 'vacancy', postId: p.id }); return; }
+    setFlash(`${prefix}${names.join(' · ')}에게 요청을 보냈습니다. 아래에서 한 명씩 취소할 수 있습니다.`);
+    setPop({ kind: 'vacancy', postId: p.id });
+  }
   async function attend(p: PostT, personId: number, name: string, kind: AttendanceKind): Promise<void> {
     setPop(null);
-    if (kind === '결근' && !(await ask(`${name} 결근 처리하고 후보 3명에게 요청을 보냅니다.`))) return;
+    if (kind === '결근' && !(await ask(`${name} 결근 처리하고 후보 3명에게 요청을 보냅니다.\n보낸 뒤 누구에게 갔는지 보이고, 한 명씩 취소할 수 있습니다.`))) return;
     if ((kind === '연차' || kind === '병가') && !(await ask(`${name} ${kind}로 표시하고 자리를 비웁니다.`))) return;
     const d = await act({ action: 'attend', postId: p.id, personId, kind });
     if (!d) return;
-    const sent = (d as BoardT & { sent: number }).sent;
-    setFlash(kind === '결근' ? `${sent}명에게 요청을 보냈습니다` : `${name} ${kind} 표시했습니다`);
+    if (kind === '결근') afterSend(p, d); else setFlash(`${name} ${kind} 표시했습니다`);
   }
 
   return (
@@ -239,13 +248,16 @@ export function Board(): React.ReactElement {
                             </button>
                             {pop?.kind === 'vacancy' && pop.postId === p.id && (
                               <Pop ref={popRef} wide>
-                                {reqs.length === 0 ? <div className="px-3 py-2 text-sm text-ink-2">아직 요청하지 않았습니다</div> : reqs.map((r) => (
-                                  <div key={r.id} className="px-3 py-1.5 text-sm flex gap-2"><span className="font-medium w-16 shrink-0">{r.name}</span><span className={`w-12 shrink-0 ${r.status === '수락' ? 'text-ok font-semibold' : r.status === '발송' ? 'text-ink' : 'text-ink-3'}`}>{r.status === '발송' ? '대기' : r.status}</span><span className="text-ink-3 truncate">{r.reason}</span></div>
+                                {reqs.length === 0 ? <div className="px-3 py-2 text-sm text-ink-2">아직 요청하지 않았습니다</div> : <div className="px-3 pt-2 pb-1 text-[12px] text-ink-3">요청 받은 사람 {reqs.length}명{open > 0 && ` · 대기 ${open}명 — 「취소」로 한 명씩 거둘 수 있습니다`}</div>}
+                                {reqs.map((r) => (
+                                  <div key={r.id} className="px-3 py-1.5 text-sm flex items-center gap-2"><span className="font-medium w-16 shrink-0">{r.name}</span><span className={`w-12 shrink-0 ${r.status === '수락' ? 'text-ok font-semibold' : r.status === '발송' ? 'text-ink' : 'text-ink-3'}`}>{r.status === '발송' ? '대기' : r.status}</span><span className="text-ink-3 truncate flex-1">{r.reason}</span>
+                                    {r.status === '발송' && <button onClick={() => act({ action: 'cancel_requests', postId: p.id, requestId: r.id }).then((d) => d && setFlash(`${r.name} 요청을 취소했습니다`))} className="text-[12px] text-ink-3 hover:text-vac shrink-0">취소</button>}</div>
                                 ))}
                                 <div className="border-t border-line-2 mt-1">
+                                  {open > 0 && <PopBtn onClick={async () => { setPop(null); if (!(await ask(`${open}명에게 보낸 요청을 취소합니다. 자리는 비어 있음으로 남습니다.`))) return; const d = await act({ action: 'cancel_requests', postId: p.id }); if (d) setFlash(`요청 ${(d as BoardT & { cancelled: number }).cancelled}건을 취소했습니다`); }}>요청 취소 ({open}명)</PopBtn>}
                                   <PopBtn onClick={() => { setPop({ kind: 'add', postId: p.id }); setQuery(''); }}>다른 라인에서 옮겨 넣기 · 직접 넣기</PopBtn>
-                                  {reqs.length === 0 ? <PopBtn onClick={async () => { setPop(null); const d = await act({ action: 'send', postId: p.id }); if (d) setFlash(`${(d as BoardT & { sent: number }).sent}명에게 요청을 보냈습니다`); }}>후보에게 요청</PopBtn>
-                                    : <PopBtn onClick={async () => { setPop(null); const d = await act({ action: 'next', postId: p.id }); if (d) setFlash(`다음 ${(d as BoardT & { sent: number }).sent}명에게 요청을 보냈습니다`); }}>다음 후보에게</PopBtn>}
+                                  {reqs.length === 0 ? <PopBtn onClick={async () => { setPop(null); const d = await act({ action: 'send', postId: p.id }); if (d) afterSend(p, d); }}>후보에게 요청</PopBtn>
+                                    : <PopBtn onClick={async () => { setPop(null); const d = await act({ action: 'next', postId: p.id }); if (d) afterSend(p, d, '다음 후보 '); }}>다음 후보에게</PopBtn>}
                                   {machine && <PopBtn onClick={() => { setPop(null); act({ action: 'stop', postId: p.id, stopped: true }).then((d) => d && setFlash(`${p.code} 부동 처리했습니다`)); }}>라인 부동 (세움)</PopBtn>}
                                   {!(p.kind === 'machine' && p.product) && <PopBtn onClick={() => { setPop(null); act({ action: 'cancel', postId: p.id }); }} muted>자리 닫기</PopBtn>}
                                 </div>
@@ -296,15 +308,15 @@ export function Board(): React.ReactElement {
           <div className="px-5 py-3 border-t border-line-2 text-[13px] text-ink-3">{board.copied_from} 표를 복사했습니다. 바뀐 곳만 고치고 {twoStep ? '입안' : '확정'}하세요.</div>
         )}
       </div>
-      <Rail board={board} date={date} shift={shift} />
+      <Rail board={board} date={date} shift={shift} onCancel={(r) => act({ action: 'cancel_requests', postId: r.post_id, requestId: r.id }).then((d) => d && setFlash(`${r.name} 요청을 취소했습니다`))} />
       </div>
-      <div role="status" aria-live="polite" className={`fixed bottom-6 left-1/2 -translate-x-1/2 bg-brand text-white text-sm px-4 py-2.5 rounded-lg shadow-lg ${flash ? '' : 'hidden'}`}>{flash}</div>
+      <div role="status" aria-live="polite" className={`fixed top-20 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-2rem)] bg-brand text-white text-sm px-4 py-2.5 rounded-lg shadow-lg ${flash ? '' : 'hidden'}`}>{flash}</div>
     </div>
   );
 }
 
 /** 오른쪽 요약: 오늘 대체 요청 현황·근태·근무조. */
-function Rail({ board, date, shift }: { board: BoardT | null; date: string; shift: Shift }): React.ReactElement {
+function Rail({ board, date, shift, onCancel }: { board: BoardT | null; date: string; shift: Shift; onCancel?: (r: RequestRow) => void }): React.ReactElement {
   const g = groupsOn(date), gt = groupsOn(addDays(date, 1));
   const reqs = board?.requests ?? [];
   const byPost = new Map<string, RequestRow[]>();
@@ -322,7 +334,7 @@ function Rail({ board, date, shift }: { board: BoardT | null; date: string; shif
                 <div className="text-[14px] font-semibold">{code}<span className="ml-2 font-normal text-ink-2">{list[0].vacated_name ? `${list[0].vacated_name} 결근` : '빈 자리'}</span></div>
                 <ul className="mt-1 flex flex-col">
                   {list.sort((a, b) => a.rank - b.rank).map((r) => (
-                    <li key={r.id} className="flex items-center gap-2 h-7 text-[14px]"><span className="w-14 truncate">{r.name}</span><span className={`w-9 ${r.status === '수락' ? 'text-ok font-semibold' : r.status === '발송' ? 'text-ink' : 'text-ink-3'}`}>{label(r.status)}</span><span className="ml-auto text-[13px] text-ink-3 tabular-nums">{r.sent_at.slice(11, 16)}</span></li>
+                    <li key={r.id} className="flex items-center gap-2 h-7 text-[14px]"><span className="w-14 truncate">{r.name}</span><span className={`w-9 ${r.status === '수락' ? 'text-ok font-semibold' : r.status === '발송' ? 'text-ink' : 'text-ink-3'}`}>{label(r.status)}</span><span className="ml-auto text-[13px] text-ink-3 tabular-nums">{r.sent_at.slice(11, 16)}</span>{r.status === '발송' && onCancel && <button onClick={() => onCancel(r)} className="text-[12px] text-ink-3 hover:text-vac">취소</button>}</li>
                   ))}
                 </ul>
               </li>
