@@ -7,7 +7,7 @@ export type Factory = { id: number; code: string; name: string };
 export type Post = { id: number; factory_id: number; code: string; name: string; kind: string; sort: number };
 export type PersonRow = Person & { affiliation: string | null; role: string | null; gender: string | null; phone: string | null; home_factory_id: number | null };
 export type Assignment = { id: number; post_id: number; person_id: number; source: string; name: string; affiliation: string | null; grp: string; work_type: string; gender: string | null };
-export type RequestRow = { id: number; board_id: number; post_id: number; person_id: number; vacated_person_id: number | null; rank: number; reason: string | null; status: string; token: string; channel: string; sent_at: string; expires_at: string | null; responded_at: string | null; name: string; affiliation: string | null; post_code: string; post_name: string; date: string; shift: Shift; factory_id: number; vacated_name: string | null };
+export type RequestRow = { id: number; board_id: number; post_id: number; person_id: number; vacated_person_id: number | null; rank: number; reason: string | null; status: string; token: string; channel: string; sent_at: string; expires_at: string | null; responded_at: string | null; name: string; affiliation: string | null; post_code: string; post_name: string; date: string; shift: Shift; factory_id: number; vacated_name: string | null; product: string | null };
 export type Board = {
   id: number; date: string; shift: Shift; factory_id: number; status: '초안' | '확정'; confirmed_at: string | null; copied_from: string | null;
   posts: (Post & { product: string | null; vacant: number })[];
@@ -80,8 +80,8 @@ export function getBoard(date: string, shift: Shift, factoryId: number, db: DB =
 }
 
 function requestsFor(where: string, db: DB): RequestRow[] {
-  return db.prepare(`SELECT r.*, p.name, p.affiliation, po.code AS post_code, po.name AS post_name, b.date, b.shift, b.factory_id, v.name AS vacated_name
-    FROM requests r JOIN people p ON p.id=r.person_id JOIN posts po ON po.id=r.post_id JOIN boards b ON b.id=r.board_id LEFT JOIN people v ON v.id=r.vacated_person_id
+  return db.prepare(`SELECT r.*, p.name, p.affiliation, po.code AS post_code, po.name AS post_name, b.date, b.shift, b.factory_id, v.name AS vacated_name, bp.product
+    FROM requests r JOIN people p ON p.id=r.person_id JOIN posts po ON po.id=r.post_id JOIN boards b ON b.id=r.board_id LEFT JOIN people v ON v.id=r.vacated_person_id LEFT JOIN board_posts bp ON bp.board_id=r.board_id AND bp.post_id=r.post_id
     WHERE ${where} ORDER BY r.sent_at DESC, r.rank`).all() as RequestRow[];
 }
 export function allRequests(db: DB = getDb()): RequestRow[] { expireDue(db); return requestsFor('1=1', db).slice(0, 400); }

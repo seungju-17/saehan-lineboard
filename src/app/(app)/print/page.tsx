@@ -12,7 +12,7 @@ export default async function PrintPage({ searchParams }: { searchParams: Promis
   const byPost = new Map<number, string[]>();
   for (const a of b.assignments) byPost.set(a.post_id, [...(byPost.get(a.post_id) ?? []), a.name]);
   return (
-    <div className="mx-auto max-w-3xl print:max-w-none">
+    <div className="mx-auto max-w-3xl print:max-w-none bg-white border border-line rounded-xl p-6 print:border-0 print:p-0 print:rounded-none">
       <div className="flex items-end justify-between mb-4 print:mb-3">
         <div>
           <div className="text-2xl font-bold">{factoryName(factory)} 배치표</div>

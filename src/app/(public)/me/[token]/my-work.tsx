@@ -25,9 +25,9 @@ export function MyWork({ token }: { token: string }): React.ReactElement {
     <div className="flex flex-col gap-6">
       <div><div className="text-sm text-ink-3">{[d.person.affiliation, d.person.work_type === '임시' ? '임시' : `${d.person.grp}조`].filter(Boolean).join(' · ')}</div><div className="text-2xl font-bold">{d.person.name}님의 근무</div></div>
       {unread.map((m) => (
-        <div key={m.id} className="border-2 border-ink rounded-xl p-4 flex flex-col gap-3">
+        <div key={m.id} className="border-2 border-brand rounded-xl p-4 flex flex-col gap-3">
           <div className="text-lg leading-snug">{m.body}</div>
-          <button onClick={() => read(m.id)} className="h-12 rounded-lg bg-ink text-white font-semibold">확인했습니다</button>
+          <button onClick={() => read(m.id)} className="h-12 rounded-lg bg-brand text-white font-semibold hover:bg-brand-2">확인했습니다</button>
         </div>
       ))}
       <ul className="divide-y divide-line">

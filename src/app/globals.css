@@ -2,29 +2,34 @@
 
 @theme {
   --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
-  --color-ink: #1a1a1a;
-  --color-ink-2: #5c5c5c;
-  --color-ink-3: #8a8a8a;
-  --color-line: #e6e6e6;
-  --color-line-2: #f2f2f2;
+  --color-brand: #1b2537;
+  --color-brand-2: #2b3a57;
+  --color-brand-soft: #e7ecf5;
+  --color-ink: #1c2230;
+  --color-ink-2: #566070;
+  --color-ink-3: #8a93a3;
+  --color-line: #e3e7ee;
+  --color-line-2: #eef1f5;
+  --color-chip: #eef1f5;
   --color-paper: #ffffff;
-  --color-ground: #f7f7f7;
-  --color-vac: #c0392b;
-  --color-vac-bg: #fff3f2;
-  --color-ok: #1a7f4b;
-  --color-ok-bg: #eaf6ef;
+  --color-ground: #f4f6f9;
+  --color-vac: #c8362b;
+  --color-vac-bg: #fdf0ee;
+  --color-ok: #1d7a4a;
+  --color-ok-bg: #e8f5ee;
 }
 
 @layer base {
-  html { font-family: var(--font-sans); color: var(--color-ink); background: var(--color-paper); }
+  html { font-family: var(--font-sans); color: var(--color-ink); background: var(--color-ground); font-feature-settings: "tnum"; }
   body { margin: 0; -webkit-font-smoothing: antialiased; }
-  button, input { font: inherit; color: inherit; }
+  button, input, select { font: inherit; color: inherit; }
   button { cursor: pointer; }
-  button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid #1a1a1a; outline-offset: 2px; }
+  button:focus-visible, input:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
 }
 
 @media print {
   @page { size: A4; margin: 12mm; }
+  html { background: #fff; }
   main { padding: 0 !important; max-width: none !important; }
   tr { break-inside: avoid; }
 }

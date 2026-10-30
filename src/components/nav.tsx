@@ -2,22 +2,27 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
-const items = [['/today', '오늘'], ['/requests', '요청'], ['/people', '사람']] as const;
+const items = [['/today', '오늘 배치'], ['/requests', '대체 요청'], ['/people', '직원']] as const;
 
 export function Nav(): React.ReactElement {
   const path = usePathname();
   const router = useRouter();
   async function logout(): Promise<void> { await fetch('/api/login', { method: 'DELETE' }); router.push('/login'); }
   return (
-    <header className="h-13 border-b border-line print:hidden">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 h-13 flex items-center gap-6">
-        <span className="font-bold tracking-tight">라인보드</span>
-        <nav className="flex gap-1">
-          {items.map(([href, label]) => (
-            <Link key={href} href={href} className={`px-3 h-9 inline-flex items-center rounded-md text-[15px] ${path.startsWith(href) ? 'bg-ground font-semibold' : 'text-ink-2 hover:text-ink'}`}>{label}</Link>
-          ))}
+    <header className="bg-brand text-white print:hidden">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 h-14 flex items-center gap-8">
+        <Link href="/today" className="flex items-center gap-2.5">
+          <span className="grid grid-cols-2 gap-0.5 w-4 h-4" aria-hidden><i className="bg-white rounded-[1px]" /><i className="bg-white/50 rounded-[1px]" /><i className="bg-white/50 rounded-[1px]" /><i className="bg-white rounded-[1px]" /></span>
+          <span className="font-bold text-[17px] tracking-tight">라인보드</span>
+          <span className="hidden sm:inline text-xs text-white/55 pl-2 border-l border-white/20">새한프라텍 지원팀</span>
+        </Link>
+        <nav className="flex gap-1 -ml-3">
+          {items.map(([href, label]) => {
+            const on = path.startsWith(href);
+            return <Link key={href} href={href} className={`relative px-3 h-14 inline-flex items-center text-[15px] ${on ? 'text-white font-semibold' : 'text-white/65 hover:text-white'}`}>{label}{on && <span className="absolute left-3 right-3 bottom-0 h-0.5 bg-white rounded-t" />}</Link>;
+          })}
         </nav>
-        <button onClick={logout} className="ml-auto text-sm text-ink-3 hover:text-ink">나가기</button>
+        <button onClick={logout} className="ml-auto text-sm text-white/65 hover:text-white">나가기</button>
       </div>
     </header>
   );
