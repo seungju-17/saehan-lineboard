@@ -1,26 +1,30 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --color-ink: #1a1a1a;
+  --color-ink-2: #5c5c5c;
+  --color-ink-3: #8a8a8a;
+  --color-line: #e6e6e6;
+  --color-line-2: #f2f2f2;
+  --color-paper: #ffffff;
+  --color-ground: #f7f7f7;
+  --color-vac: #c0392b;
+  --color-vac-bg: #fff3f2;
+  --color-ok: #1a7f4b;
+  --color-ok-bg: #eaf6ef;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@layer base {
+  html { font-family: var(--font-sans); color: var(--color-ink); background: var(--color-paper); }
+  body { margin: 0; -webkit-font-smoothing: antialiased; }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid #1a1a1a; outline-offset: 2px; }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@media print {
+  @page { size: A4; margin: 12mm; }
+  main { padding: 0 !important; max-width: none !important; }
+  tr { break-inside: avoid; }
 }

@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 라인보드 — 새한프라텍 인원 배치 · 결원 대체 (평가용 MVP)
 
-## Getting Started
+하루 한 장의 배치표를 그대로 화면에 옮긴 도구입니다.
+이전 표가 자동으로 복사되고(조가 바뀌는 날은 같은 조가 마지막으로 그 근무를 한 날의 표), 결원이 생기면 경험 순으로 고른 3명에게 대체 요청이 나갑니다.
+제품이 적혀 있는데 근무자가 없는 라인은 자동으로 빨갛게 표시됩니다.
 
-First, run the development server:
+## 실행
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+pnpm seed      # data/lineboard.db 생성 (직원 67명 + 2025 실제 배치표 이력)
+pnpm dev       # http://localhost:3000  비밀번호: saehan
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Node 20 이상, pnpm. 외부 서비스·DB 설치 없음 (SQLite 파일 하나).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 화면
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 주소 | 누가 | 내용 |
+|---|---|---|
+| `/today` | 지원팀 | 날짜·주간/야간·공장 선택, 라인 / 제품 / 근무자 표, 확정 |
+| `/print` | 지원팀 | A4 인쇄용 배치표 (표 화면의 「인쇄」) |
+| `/requests` | 지원팀 | 대체 요청 이력 (누구에게, 왜, 응답) |
+| `/people` | 지원팀 | 직원 명단 (조·근무형태·공장·전화 수정) |
+| `/r/<토큰>` | 근무자 | 대체 요청 — 수락 / 이번엔 어렵습니다 |
+| `/me/<토큰>` | 근무자 | 내 배치 알림 · 이번 주 근무 |
 
-## Learn More
+표에서 이름을 누르면 「결근 처리 · 빼기」, `+`를 누르면 그 라인 경험 순 추천, 제품을 누르면 바로 수정.
+「비어 있음」을 누르면 요청 상태와 「다음 후보에게 · 직접 넣기」.
 
-To learn more about Next.js, take a look at the following resources:
+## 대체 후보 순위
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+같은 날 이미 배치된 사람과 근무 중인 조는 제외하고
+`이 라인 경험×10 + 같은 제품×3 + 이 공장 경험×1 − 최근 30일 대체 횟수×25` 로 정렬합니다. (`src/lib/engine.ts`, `tests/engine.test.ts`)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 알림
 
-## Deploy on Vercel
+지금은 데모 모드로, 문자 대신 `/r/<토큰>` 링크를 만들어 `messages` 테이블에 저장합니다.
+실제 발송은 `src/lib/repo.ts` 의 `sendMessage` 한 곳만 바꾸면 됩니다 (알림톡·SMS).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 구조
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/lib/shift.ts    3조 2교대 달력 (근무조·휴무조)
+src/lib/engine.ts   후보 순위
+src/lib/repo.ts     표·요청·확정·알림
+src/lib/db.ts       SQLite 스키마
+scripts/seed.ts     이력 적재
+```
+
+환경변수: `LINEBOARD_PASSWORD` (기본 saehan), `LINEBOARD_SECRET`, `LINEBOARD_DB`.
