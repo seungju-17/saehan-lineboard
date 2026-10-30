@@ -214,6 +214,16 @@ export function autoFill(boardId: number, db: DB = getDb()): { filled: number; l
   return { filled, lines, need };
 }
 
+/** 라인 코드로 대체 후보를 본다(봇·검색용). 이미 그날 배치된 사람 제외. */
+export function candidatesFor(date: string, shift: Shift, factoryId: number, postCode: string, limit = 5, db: DB = getDb()): { personId: number; name: string; reasons: string[] }[] {
+  const post = db.prepare('SELECT id FROM posts WHERE factory_id=? AND (code=? OR code=?)').get(factoryId, postCode, postCode.padStart(2, '0')) as { id: number } | undefined;
+  if (!post) return [];
+  const b = db.prepare('SELECT id FROM boards WHERE date=? AND shift=? AND factory_id=?').get(date, shift, factoryId) as { id: number } | undefined;
+  const product = b ? ((db.prepare('SELECT product FROM board_posts WHERE board_id=? AND post_id=?').get(b.id, post.id) as { product: string | null } | undefined)?.product ?? null) : null;
+  const ctx = rankContext(date, shift, factoryId, db);
+  return rankCandidates({ date, shift, postId: post.id, product, ...ctx, limit }).map((c) => ({ personId: c.personId, name: c.name, reasons: c.reasons }));
+}
+
 export function confirmBoard(boardId: number, db: DB = getDb()): { notified: number } {
   const b = db.prepare('SELECT date, shift, factory_id FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift; factory_id: number };
   const fac = factoryName(b.factory_id, db);

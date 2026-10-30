@@ -4,6 +4,7 @@ import { Nav } from '../src/components/nav';
 import { Requests } from '../src/components/requests';
 import { People } from '../src/components/people';
 import { Dashboard } from '../src/components/dashboard';
+import { Assistant } from '../src/components/assistant';
 import { Respond } from '../src/app/(public)/r/[token]/respond';
 import { MyWork } from '../src/app/(public)/me/[token]/my-work';
 import { allRequests, ensureToken, factoryName, getBoard, people, requestByToken } from '../src/lib/repo';
@@ -122,7 +123,8 @@ export function App(): React.ReactElement {
     <div className="min-h-screen bg-ground">
       <Nav />
       <div className="bg-brand-soft text-brand text-[13px]"><div className="mx-auto max-w-6xl px-4 sm:px-6 py-1.5 flex flex-wrap items-center gap-x-2"><span className="font-semibold">브라우저 안에서 그대로 실행 중</span><span className="text-brand/80">새로고침하면 처음 상태로 돌아갑니다.</span></div></div>
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-8">{page}</main>
+      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-8 pb-24">{page}</main>
+      <Assistant needsKey />
       <Confirm q={q} onDone={() => setQ(null)} />
     </div>
   );

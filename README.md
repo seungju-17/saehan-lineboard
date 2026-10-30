@@ -54,3 +54,9 @@ scripts/seed.ts     이력 적재
 ```
 
 환경변수: `LINEBOARD_PASSWORD` (기본 saehan), `LINEBOARD_SECRET`, `LINEBOARD_DB`.
+
+## 물어보기 (배치표 도우미)
+
+오른쪽 아래 「물어보기」는 Claude가 배치표 DB를 읽기 전용으로 조회해 답하는 봇입니다. 표를 바꾸는 도구는 없습니다.
+설치판은 `.env.local` 에 `ANTHROPIC_API_KEY=sk-ant-…` 를 넣고 다시 시작하면 켜집니다 (console.anthropic.com 에서 발급).
+브라우저 판은 키를 본인 브라우저에만 저장해 직접 묻습니다. 모델 `claude-opus-5-5`, 질문 하나에 수 원 수준.
