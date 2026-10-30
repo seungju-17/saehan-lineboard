@@ -247,19 +247,19 @@ export function Board(): React.ReactElement {
                               비어 있음{open > 0 && <span className="font-normal text-ink-2"> · 요청 {open}</span>}{reqs.some((r) => r.status === '거절') && open === 0 && <span className="font-normal text-ink-2"> · 응답 없음</span>}
                             </button>
                             {pop?.kind === 'vacancy' && pop.postId === p.id && (
-                              <Pop ref={popRef} wide>
-                                {reqs.length === 0 && <div className="px-3 py-2 text-sm text-ink-2">아직 요청하지 않았습니다</div>}
+                              <Pop ref={popRef}>
+                                {reqs.length === 0 && <div className="px-3 h-8 flex items-center text-sm text-ink-2">아직 요청 전</div>}
                                 {reqs.map((r) => (
-                                  <div key={r.id} className="px-3 py-1.5 text-sm flex items-center gap-3"><span className="font-medium w-16 shrink-0">{r.name}</span><StatusTag status={r.status} />
+                                  <div key={r.id} className="px-3 h-8 text-sm flex items-center gap-2"><span className="font-medium w-14 shrink-0 truncate">{r.name}</span><StatusTag status={r.status} />
                                     {r.status === '발송' && <button onClick={() => act({ action: 'cancel_requests', postId: p.id, requestId: r.id }).then((d) => d && setFlash(`${r.name} 요청 취소`))} className="h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg shrink-0">취소</button>}</div>
                                 ))}
-                                <div className="border-t border-line-2 mt-1">
-                                  {open > 0 && <PopBtn onClick={async () => { setPop(null); if (!(await ask(`${open}명에게 보낸 요청을 모두 취소합니다.`))) return; const d = await act({ action: 'cancel_requests', postId: p.id }); if (d) setFlash(`요청 ${(d as BoardT & { cancelled: number }).cancelled}건 취소`); }}>전체 취소 ({open}명)</PopBtn>}
-                                  <PopBtn onClick={() => { setPop({ kind: 'add', postId: p.id }); setQuery(''); }}>다른 라인에서 옮겨 넣기 · 직접 넣기</PopBtn>
-                                  {reqs.length === 0 ? <PopBtn onClick={async () => { setPop(null); const d = await act({ action: 'send', postId: p.id }); if (d) afterSend(p, d); }}>후보에게 요청</PopBtn>
-                                    : <PopBtn onClick={async () => { setPop(null); const d = await act({ action: 'next', postId: p.id }); if (d) afterSend(p, d, '다음 후보 '); }}>다음 후보에게</PopBtn>}
-                                  {machine && <PopBtn onClick={() => { setPop(null); act({ action: 'stop', postId: p.id, stopped: true }).then((d) => d && setFlash(`${p.code} 부동 처리했습니다`)); }}>라인 부동 (세움)</PopBtn>}
-                                  {!(p.kind === 'machine' && p.product) && <PopBtn onClick={() => { setPop(null); act({ action: 'cancel', postId: p.id }); }} muted>자리 닫기</PopBtn>}
+                                <div className="border-t border-line-2 mt-0.5 pt-0.5">
+                                  {open > 0 && <PopBtn compact onClick={async () => { setPop(null); if (!(await ask(`${open}명에게 보낸 요청을 모두 취소합니다.`))) return; const d = await act({ action: 'cancel_requests', postId: p.id }); if (d) setFlash(`요청 ${(d as BoardT & { cancelled: number }).cancelled}건 취소`); }}>전체 취소 ({open}명)</PopBtn>}
+                                  <PopBtn compact onClick={() => { setPop({ kind: 'add', postId: p.id }); setQuery(''); }}>직접 넣기 · 옮겨 넣기</PopBtn>
+                                  {reqs.length === 0 ? <PopBtn compact onClick={async () => { setPop(null); const d = await act({ action: 'send', postId: p.id }); if (d) afterSend(p, d); }}>후보에게 요청</PopBtn>
+                                    : <PopBtn compact onClick={async () => { setPop(null); const d = await act({ action: 'next', postId: p.id }); if (d) afterSend(p, d, '다음 후보 '); }}>다음 후보에게</PopBtn>}
+                                  {machine && <PopBtn compact onClick={() => { setPop(null); act({ action: 'stop', postId: p.id, stopped: true }).then((d) => d && setFlash(`${p.code} 부동 처리했습니다`)); }}>라인 부동 (세움)</PopBtn>}
+                                  {!(p.kind === 'machine' && p.product) && <PopBtn compact onClick={() => { setPop(null); act({ action: 'cancel', postId: p.id }); }} muted>자리 닫기</PopBtn>}
                                 </div>
                               </Pop>
                             )}
@@ -371,8 +371,8 @@ function Seg({ value, options, onChange }: { value: string; options: readonly (r
 const Pop = forwardRef<HTMLDivElement, { children: React.ReactNode; wide?: boolean }>(function Pop({ children, wide }, ref) {
   return <div ref={ref} className={`absolute z-20 top-9 left-0 ${wide ? 'w-80' : 'w-52'} py-1 bg-white border border-line rounded-lg shadow-[0_8px_24px_rgba(28,34,48,0.12)]`}>{children}</div>;
 });
-function PopBtn({ children, onClick, muted }: { children: React.ReactNode; onClick: () => void; muted?: boolean }): React.ReactElement {
-  return <button onClick={onClick} className={`w-full text-left px-3 h-10 text-[15px] hover:bg-ground ${muted ? 'text-ink-3' : ''}`}>{children}</button>;
+function PopBtn({ children, onClick, muted, compact }: { children: React.ReactNode; onClick: () => void; muted?: boolean; compact?: boolean }): React.ReactElement {
+  return <button onClick={onClick} className={`w-full text-left px-3 ${compact ? 'h-8 text-[14px]' : 'h-10 text-[15px]'} hover:bg-ground ${muted ? 'text-ink-3' : ''}`}>{children}</button>;
 }
 
 /** 요청 상태 표시: 대기(주황) · 수락(초록) · 취소/만료/거절(빨강·회색) */
