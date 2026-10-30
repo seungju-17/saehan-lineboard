@@ -37,3 +37,14 @@ const html = `<title>라인보드</title>
 `;
 fs.writeFileSync(out, html);
 console.log('wrote', out, (fs.statSync(out).size / 1024 / 1024).toFixed(2) + 'MB');
+
+// GitHub Pages용 완전한 문서 (docs/index.html)
+const pages = `<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="description" content="새한프라텍 인원 배치·결원 대체 라인보드 (브라우저 판)">\n`
+  + html.replace('<title>라인보드</title>', '<title>라인보드 · 새한프라텍</title>')
+        .replace('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">', '<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">')
+        .replace('<div id="root"></div>', '</head>\n<body>\n<div id="root"></div>')
+  + '\n</body>\n</html>\n';
+fs.mkdirSync(abs('docs'), { recursive: true });
+fs.writeFileSync(abs('docs/index.html'), pages);
+fs.writeFileSync(abs('docs/.nojekyll'), '');
+console.log('wrote docs/index.html (GitHub Pages)');
