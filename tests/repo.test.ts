@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { openDb } from '../src/lib/db';
-import { addPerson, cancelRequests, getSettings, setSettings, weekHoursFor, ensureBoard, getBoard, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
+import { addPerson, cancelRequests, getSettings, setSettings, weekHoursFor, needFor, setNeed, setProduct, clearVacancy, ensureBoard, getBoard, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
 import { periodFor } from '../src/lib/attendance-xlsx';
 
 function memDb() {
@@ -17,9 +17,67 @@ function memDb() {
 
 describe('빈 자리 판정', () => {
   it('무인 라인은 제품만 있어도 비어 있음이 아니다', () => {
-    expect(isVacantPost({ kind: 'machine', unmanned: 1, product: '진로4.0', vacant: 0, stopped: 0 }, 0)).toBe(false);
-    expect(isVacantPost({ kind: 'machine', unmanned: 0, product: '신광야950', vacant: 0, stopped: 0 }, 0)).toBe(true);
-    expect(isVacantPost({ kind: 'machine', unmanned: 0, product: '신광야950', vacant: 0, stopped: 0 }, 1)).toBe(false);
+    expect(isVacantPost({ kind: 'machine', unmanned: 1, product: '진로4.0', vacant: 0, stopped: 0, need: null }, 0)).toBe(false);
+    expect(isVacantPost({ kind: 'machine', unmanned: 0, product: '신광야950', vacant: 0, stopped: 0, need: null }, 0)).toBe(true);
+    expect(isVacantPost({ kind: 'machine', unmanned: 0, product: '신광야950', vacant: 0, stopped: 0, need: null }, 1)).toBe(false);
+  });
+  it('필요 인원이 정해져 있으면 그보다 적을 때만 비어 있음', () => {
+    const p = { kind: 'machine', unmanned: 0, product: '신광야950', vacant: 0, stopped: 0, need: 2 };
+    expect(needFor(p, 1)).toBe(2);
+    expect(isVacantPost(p, 1)).toBe(true);
+    expect(isVacantPost(p, 2)).toBe(false);
+    expect(isVacantPost({ ...p, need: 0 }, 0)).toBe(false);
+  });
+  it('표를 복사하면 어제 인원이 오늘 필요 인원이 된다', () => {
+    const db = memDb();
+    addPerson(1, 36, 2, '이력', db); // 10-20 S-3: 박현주 + 김순자 = 2명
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    expect(s3.need).toBe(2);
+    setNeed(b.id, s3.id, 1, db);
+    expect(getBoard('2026-10-21', '주간', 2, db).posts.find((p) => p.code === 'S-3')!.need).toBe(1);
+    expect(() => setNeed(b.id, s3.id, 99, db)).toThrow();
+    // 요청이 나간 뒤 필요 인원을 낮춰 자리가 차면 요청은 취소된다
+    setNeed(b.id, s3.id, 3, db);
+    sendRequests(b.id, s3.id, null, db);
+    setNeed(b.id, s3.id, 2, db);
+    expect(getBoard('2026-10-21', '주간', 2, db).requests.every((r) => r.status !== '발송')).toBe(true);
+  });
+  it('남은 인원으로 충분하면 결근을 기록만 할 수 있고, 자리는 비어 있지 않다', () => {
+    const db = memDb();
+    addPerson(1, 36, 2, '이력', db);
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    setNeed(b.id, s3.id, 1, db);
+    const r = setAttendance(b.id, s3.id, 1, '결근', null, db, false);
+    expect(r.sent).toBe(0);
+    const after = getBoard('2026-10-21', '주간', 2, db);
+    const cnt = after.assignments.filter((a) => a.post_id === s3.id).length;
+    expect(cnt).toBe(1);
+    expect(isVacantPost(after.posts.find((p) => p.code === 'S-3')!, cnt)).toBe(false);
+    expect(after.attendance.map((a) => a.kind)).toEqual(['결근']);
+  });
+  it('요청을 보내면 필요 인원이 지금 인원+1로 잡히고, 자리 닫기는 지금 인원으로 맞춘다', () => {
+    const db = memDb();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    setNeed(b.id, s3.id, null, db);
+    sendRequests(b.id, s3.id, null, db); // 박현주 1명 있는 상태에서 한 명 더
+    expect(getBoard('2026-10-21', '주간', 2, db).posts.find((p) => p.code === 'S-3')!.need).toBe(2);
+    clearVacancy(b.id, s3.id, db);
+    const p = getBoard('2026-10-21', '주간', 2, db).posts.find((x) => x.code === 'S-3')!;
+    expect(p.need).toBe(1);
+    expect(isVacantPost(p, 1)).toBe(false);
+  });
+  it('제품을 바꾸면 그 제품으로 섰던 인원을 제안한다', () => {
+    const db = memDb();
+    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (3,'2026-10-14','주간',2,'확정')").run();
+    db.prepare("INSERT INTO board_posts (board_id, post_id, product) VALUES (3,36,'생수900')").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (3,36,1,'이력'),(3,36,2,'이력'),(3,36,3,'이력')").run();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    setProduct(b.id, s3.id, '생수900', db);
+    expect(getBoard('2026-10-21', '주간', 2, db).posts.find((p) => p.code === 'S-3')!.need).toBe(3);
   });
   it('부동 라인은 빈 자리가 아니고 열린 요청도 닫힌다', () => {
     const db = memDb();

@@ -22,7 +22,7 @@ people(id, name, affiliation, grp, work_type, role, gender, phone, home_factory_
                                                 직원. grp: 'A','B','C','주전','미정'. work_type: '교대','주간고정','임시'. gender: 'M'|'F'. unit: 집단(주전반/교대반/협력사 A조·B조·C조/PE 협력사/임시). affiliation: 소속사(새한/세영/다연/피너)
 boards(id, date, shift, factory_id, status, confirmed_at, copied_from, note)
                                                 하루 한 근무의 배치표. date 'YYYY-MM-DD', shift '주간'|'야간', status '초안'|'입안'|'확정'. note=비고
-board_posts(board_id, post_id, product, vacant, stopped) 그날 그 라인의 제품명, 비어 있음(1), 부동(stopped=1, 라인 세움)
+board_posts(board_id, post_id, product, vacant, stopped, need) 그날 그 라인의 제품명, 부동(stopped=1, 라인 세움), need=필요 인원(NULL이면 제품 있는 유인 라인 1명). 빈 자리 = 배치 인원 < 필요 인원
 assignments(id, board_id, post_id, person_id, source)
                                                 누가 어느 라인에 섰는가. source: 이력(과거 자료)|복사|수동|대체(결원 대체로 들어감)|자동(자동 채우기)
 requests(id, board_id, post_id, person_id, vacated_person_id, rank, reason, status, sent_at, responded_at)

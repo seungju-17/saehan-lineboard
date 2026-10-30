@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS boards (
   status TEXT NOT NULL DEFAULT '초안' CHECK (status IN ('초안','입안','확정')), confirmed_at TEXT, copied_from TEXT, note TEXT, UNIQUE (date, shift, factory_id));
 CREATE TABLE IF NOT EXISTS board_posts (
   board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id),
-  product TEXT, vacant INTEGER DEFAULT 0, stopped INTEGER DEFAULT 0, PRIMARY KEY (board_id, post_id));
+  product TEXT, vacant INTEGER DEFAULT 0, stopped INTEGER DEFAULT 0, need INTEGER, PRIMARY KEY (board_id, post_id));
 CREATE TABLE IF NOT EXISTS assignments (
   id INTEGER PRIMARY KEY, board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id),
   person_id INTEGER NOT NULL REFERENCES people(id), source TEXT NOT NULL DEFAULT '수동' CHECK (source IN ('이력','복사','수동','대체','자동')),
@@ -56,6 +56,9 @@ export function openDb(file: string): DB {
   d.pragma('journal_mode = WAL');
   d.pragma('foreign_keys = ON');
   d.exec(SCHEMA);
+  // 예전 파일에 없는 열 보태기
+  const cols = (d.prepare('PRAGMA table_info(board_posts)').all() as { name: string }[]).map((c) => c.name);
+  if (!cols.includes('need')) d.exec('ALTER TABLE board_posts ADD COLUMN need INTEGER');
   return d;
 }
 export function getDb(): DB {

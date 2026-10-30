@@ -4,7 +4,7 @@ type SqlDb = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type DB = any;
 let raw: SqlDb | null = null;
-export function setDb(d: SqlDb): void { raw = d; d.run('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)'); }
+export function setDb(d: SqlDb): void { raw = d; d.run('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)'); try { d.run('ALTER TABLE board_posts ADD COLUMN need INTEGER'); } catch { /* 이미 있음 */ } }
 export function rawDb(): SqlDb { return raw; }
 const norm = (p: unknown[]): unknown[] => p.map((v) => (v === undefined ? null : v));
 

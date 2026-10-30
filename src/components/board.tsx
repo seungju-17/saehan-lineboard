@@ -1,6 +1,6 @@
 'use client';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ATTENDANCE_KINDS, OPTIONAL_KINDS, VACATING_KINDS, isVacantPost, type AttendanceKind, type Board as BoardT, type RequestRow, type SendResult } from '@/lib/repo';
+import { ATTENDANCE_KINDS, OPTIONAL_KINDS, VACATING_KINDS, isVacantPost, needFor, type AttendanceKind, type Board as BoardT, type RequestRow, type SendResult } from '@/lib/repo';
 import { addDays, currentShiftSeoul, fmtKo, fmtShort, groupsOn, todaySeoul, type Shift } from '@/lib/shift';
 import { ask } from '@/lib/ask';
 
@@ -17,6 +17,7 @@ export function Board(): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
+  const [needEdit, setNeedEdit] = useState<number | null>(null);
   const [noteEdit, setNoteEdit] = useState(false);
   const [query, setQuery] = useState('');
   const [showIdle, setShowIdle] = useState<Record<string, boolean>>({});
@@ -104,10 +105,14 @@ export function Board(): React.ReactElement {
     setFlash(`${prefix}${names.join(' · ')}에게 요청`);
     setPop({ kind: 'vacancy', postId: p.id });
   }
-  async function attend(p: PostT, personId: number, name: string, kind: AttendanceKind): Promise<void> {
+  async function attend(p: PostT, personId: number, name: string, kind: AttendanceKind, count: number): Promise<void> {
     setPop(null);
     let request = VACATING_KINDS.includes(kind);
-    if (request && !(await ask(`${name} ${kind} 처리하고 후보 3명에게 요청을 보냅니다.`))) return;
+    if (request) {
+      const need = needFor(p, count), left = count - 1;
+      if (left >= need && need > 0) request = await ask(`${name} ${kind}. 남은 ${left}명으로 필요 인원 ${need}명이 찹니다. 그래도 요청을 보낼까요?`, { ok: '요청 보내기', cancel: '기록만' });
+      else if (!(await ask(`${name} ${kind} 처리하고 후보 3명에게 요청을 보냅니다.`))) return;
+    }
     if (OPTIONAL_KINDS.includes(kind)) request = await ask(`${name} ${kind}로 표시합니다. 대체 요청도 보낼까요?`, { ok: '요청 보내기', cancel: '기록만' });
     const d = await act({ action: 'attend', postId: p.id, personId, kind, request });
     if (!d) return;
@@ -173,7 +178,7 @@ export function Board(): React.ReactElement {
             </tr>
           </thead>
           {groups.map((g) => {
-            const isIdle = (p: PostT): boolean => p.kind === 'machine' && !p.unmanned && !p.stopped && !p.product && (byPost.get(p.id)?.length ?? 0) === 0 && Number(p.vacant) !== 1;
+            const isIdle = (p: PostT): boolean => p.kind === 'machine' && !p.unmanned && !p.stopped && !p.product && (byPost.get(p.id)?.length ?? 0) === 0 && !isVacantPost(p, 0);
             const idleCount = g.posts.filter(isIdle).length;
             const collapse = idleCount > 1 && !showIdle[g.name];
             const shown = collapse ? g.posts.filter((p) => !isIdle(p)) : g.posts;
@@ -187,6 +192,7 @@ export function Board(): React.ReactElement {
                 const reqs = reqByPost.get(p.id) ?? [];
                 const open = reqs.filter((r) => r.status === '발송').length;
                 const vacant = isVacant(p);
+                const need = needFor(p, ppl.length);
                 const machine = p.kind === 'machine';
                 const unmanned = Number(p.unmanned) === 1, stopped = Number(p.stopped) === 1;
                 const idle = machine && !unmanned && !stopped && !p.product && ppl.length === 0 && !vacant;
@@ -230,7 +236,7 @@ export function Board(): React.ReactElement {
                               <Pop ref={popRef} wide>
                                 <div className="px-3 pt-2 pb-1.5 text-xs text-ink-3 border-b border-line-2">{[a.affiliation, a.unit, a.gender === 'M' ? '남' : a.gender === 'F' ? '여' : null].filter(Boolean).join(' · ') || '정보 없음'}{away ? ` · ${a.home_factory_id}공장 소속(지원)` : ''}</div>
                                 <div className="grid grid-cols-2">
-                                  {ATTENDANCE_KINDS.map((k) => <PopBtn key={k} onClick={() => attend(p, a.person_id, a.name, k)} muted={att?.kind === k}>{k === '결근' ? '결근 처리' : k}{att?.kind === k ? ' ✓' : ''}</PopBtn>)}
+                                  {ATTENDANCE_KINDS.map((k) => <PopBtn key={k} onClick={() => attend(p, a.person_id, a.name, k, ppl.length)} muted={att?.kind === k}>{k === '결근' ? '결근 처리' : k}{att?.kind === k ? ' ✓' : ''}</PopBtn>)}
                                 </div>
                                 <div className="border-t border-line-2">
                                   {att && <PopBtn muted onClick={() => { setPop(null); act({ action: 'attend', postId: null, personId: a.person_id, kind: null }); }}>근태 표시 지우기</PopBtn>}
@@ -245,7 +251,7 @@ export function Board(): React.ReactElement {
                         {vacant && (
                           <span className="relative">
                             <button data-chip="vacant" onClick={() => setPop({ kind: 'vacancy', postId: p.id })} className="h-8 px-3 rounded-md bg-white border border-vac/40 text-vac text-sm font-semibold hover:border-vac">
-                              비어 있음{open > 0 && <span className="font-normal text-ink-2"> · 요청 {open}</span>}{reqs.some((r) => r.status === '거절') && open === 0 && <span className="font-normal text-ink-2"> · 응답 없음</span>}
+                              비어 있음{need > 1 && <span className="font-normal"> {ppl.length}/{need}</span>}{open > 0 && <span className="font-normal text-ink-2"> · 요청 {open}</span>}{reqs.some((r) => r.status === '거절') && open === 0 && <span className="font-normal text-ink-2"> · 응답 없음</span>}
                             </button>
                             {pop?.kind === 'vacancy' && pop.postId === p.id && (
                               <Pop ref={popRef}>
@@ -281,7 +287,11 @@ export function Board(): React.ReactElement {
                         )}
                       </div>
                     </td>
-                    <td className={`pr-5 py-2.5 text-right text-sm align-middle hidden sm:table-cell ${ppl.length ? 'text-ink-2' : 'text-ink-3'}`}>{ppl.length || ''}</td>
+                    <td className="pr-3 py-2.5 text-right text-sm align-middle hidden sm:table-cell">
+                      {needEdit === p.id
+                        ? <input autoFocus type="number" min={0} max={20} defaultValue={need} aria-label={`${p.code} 필요 인원`} onBlur={async (e) => { setNeedEdit(null); const v = e.target.value === '' ? null : Number(e.target.value); if (v !== need) await act({ action: 'need', postId: p.id, need: v }); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur(); }} className="h-8 w-14 rounded-md border border-line px-2 text-right text-sm" />
+                        : <button disabled={locked || unmanned} title="필요 인원 바꾸기" aria-label={`${p.code} 인원 ${ppl.length}명, 필요 ${need}명`} onClick={() => setNeedEdit(p.id)} className={`h-8 px-2 rounded-md tabular-nums hover:bg-ground disabled:cursor-default disabled:hover:bg-transparent ${vacant ? 'text-vac font-semibold' : ppl.length ? 'text-ink-2' : 'text-ink-3'}`}>{need > 0 || ppl.length ? `${ppl.length}${ppl.length < need ? ` / ${need}` : ''}` : ''}</button>}
+                    </td>
                   </tr>
                 );
               })}

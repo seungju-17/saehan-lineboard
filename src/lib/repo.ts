@@ -13,7 +13,7 @@ export type AttendanceKind = typeof ATTENDANCE_KINDS[number];
 export type RequestRow = { id: number; board_id: number; post_id: number; person_id: number; vacated_person_id: number | null; rank: number; reason: string | null; status: string; token: string; channel: string; sent_at: string; expires_at: string | null; responded_at: string | null; name: string; affiliation: string | null; post_code: string; post_name: string; date: string; shift: Shift; factory_id: number; vacated_name: string | null; vacated_kind: string | null; product: string | null };
 export type Board = {
   id: number; date: string; shift: Shift; factory_id: number; status: '초안' | '입안' | '확정'; confirmed_at: string | null; copied_from: string | null; note: string | null;
-  posts: (Post & { product: string | null; vacant: number; stopped: number })[];
+  posts: (Post & { product: string | null; vacant: number; stopped: number; need: number | null })[];
   assignments: Assignment[];
   attendance: AttendanceRow[];
   requests: RequestRow[];
@@ -65,9 +65,12 @@ export function ensureBoard(date: string, shift: Shift, factoryId: number, db: D
   const ins = db.prepare('INSERT INTO boards (date, shift, factory_id, copied_from) VALUES (?,?,?,?)').run(date, shift, factoryId, src?.date ?? null);
   const id = Number(ins.lastInsertRowid);
   if (src && latest) {
-    db.prepare('INSERT INTO board_posts (board_id, post_id, product, vacant) SELECT ?, post_id, product, 0 FROM board_posts WHERE board_id=?').run(id, latest.id);
+    db.prepare('INSERT INTO board_posts (board_id, post_id, product, vacant, need) SELECT ?, post_id, product, 0, need FROM board_posts WHERE board_id=?').run(id, latest.id);
     db.prepare(`INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source) SELECT ?, a.post_id, a.person_id, '복사' FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? AND p.work_type='교대'`).run(id, src.id);
     db.prepare(`INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source) SELECT ?, a.post_id, a.person_id, '복사' FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? AND p.work_type<>'교대'`).run(id, latest.id);
+    // 필요 인원 = 복사돼 들어온 인원. 복사된 사람이 없는 자리는 지난 표의 필요 인원을 그대로 둔다.
+    db.prepare('INSERT OR IGNORE INTO board_posts (board_id, post_id) SELECT DISTINCT ?, post_id FROM assignments WHERE board_id=?').run(id, id);
+    db.prepare('UPDATE board_posts SET need=COALESCE(NULLIF((SELECT COUNT(*) FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id), 0), need) WHERE board_id=?').run(id);
     db.prepare("INSERT INTO logs (board_id, action, detail) VALUES (?, '복사', ?)").run(id, src.id === latest.id ? src.date : `교대 ${src.date} · 그 외 ${latest.date}`);
   }
   return id;
@@ -78,14 +81,14 @@ export function getBoard(date: string, shift: Shift, factoryId: number, db: DB =
   expireDue(db);
   const b = boardRow(date, shift, factoryId, db)!;
   const ps = posts(factoryId, db);
-  const bp = new Map((db.prepare('SELECT post_id, product, vacant, stopped FROM board_posts WHERE board_id=?').all(id) as { post_id: number; product: string | null; vacant: number; stopped: number }[]).map((r) => [r.post_id, r]));
+  const bp = new Map((db.prepare('SELECT post_id, product, vacant, stopped, need FROM board_posts WHERE board_id=?').all(id) as { post_id: number; product: string | null; vacant: number; stopped: number; need: number | null }[]).map((r) => [r.post_id, r]));
   const assignments = db.prepare(`SELECT a.id, a.post_id, a.person_id, a.source, p.name, p.affiliation, p.grp, p.work_type, p.gender, p.home_factory_id, p.unit
     FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? ORDER BY a.id`).all(id) as Assignment[];
   const requests = requestsFor(`r.board_id=${id}`, db);
   const attendance = db.prepare('SELECT t.person_id, t.kind, t.note, p.name FROM attendance t JOIN people p ON p.id=t.person_id WHERE t.date=? AND t.shift=? ORDER BY t.id').all(date, shift) as AttendanceRow[];
   return {
     id, date, shift, factory_id: factoryId, status: b.status, confirmed_at: b.confirmed_at, copied_from: b.copied_from, note: b.note,
-    posts: ps.map((p) => ({ ...p, product: bp.get(p.id)?.product ?? null, vacant: bp.get(p.id)?.vacant ?? 0, stopped: bp.get(p.id)?.stopped ?? 0 })),
+    posts: ps.map((p) => ({ ...p, product: bp.get(p.id)?.product ?? null, vacant: bp.get(p.id)?.vacant ?? 0, stopped: bp.get(p.id)?.stopped ?? 0, need: bp.get(p.id)?.need ?? null })),
     assignments, requests, attendance, suggestions: suggestionsFor(date, shift, factoryId, ps, assignments, db),
   };
 }
@@ -155,10 +158,27 @@ function suggestionsFor(date: string, shift: Shift, factoryId: number, ps: Post[
   return out;
 }
 
-/** 빈 자리 판정. 무인 라인·부동 라인은 비어 있어도 빈 자리가 아니다. */
-export function isVacantPost(p: { kind: string; unmanned: number; product: string | null; vacant: number; stopped: number }, count: number): boolean {
-  if (Number(p.unmanned) === 1 || Number(p.stopped) === 1) return false;
-  return Number(p.vacant) === 1 || (count === 0 && p.kind === 'machine' && !!p.product);
+export type VacancyInput = { kind: string; unmanned: number; product: string | null; vacant: number; stopped: number; need?: number | null };
+/** 그 자리에 필요한 인원. 정해 둔 값이 있으면 그 값, 없으면 제품이 걸린 유인 라인은 1명, 그 밖에는 0. 무인·부동은 0. */
+export function needFor(p: VacancyInput, count: number): number {
+  if (Number(p.unmanned) === 1 || Number(p.stopped) === 1) return 0;
+  if (p.need !== null && p.need !== undefined) return Number(p.need);
+  if (Number(p.vacant) === 1) return count + 1;
+  return p.kind === 'machine' && p.product ? 1 : 0;
+}
+/** 빈 자리 판정: 있는 사람이 필요 인원보다 적을 때. 무인 라인·부동 라인은 비어 있어도 빈 자리가 아니다. */
+export function isVacantPost(p: VacancyInput, count: number): boolean { return count < needFor(p, count); }
+/** 필요 인원 바꾸기. null 이면 기본값으로 돌아간다. */
+export function setNeed(boardId: number, postId: number, need: number | null, db: DB = getDb()): void {
+  if (need !== null && (!Number.isInteger(need) || need < 0 || need > 20)) throw new Error('필요 인원은 0~20 사이여야 합니다');
+  ensureBp(boardId, postId, db);
+  db.prepare('UPDATE board_posts SET need=?, vacant=0 WHERE board_id=? AND post_id=?').run(need, boardId, postId);
+  db.prepare("INSERT INTO logs (board_id, post_id, action, detail) VALUES (?,?,'인원',?)").run(boardId, postId, need === null ? '기본' : `${need}명`);
+  // 필요 인원을 낮춰서 자리가 찼으면 기다리는 요청은 거둔다
+  if (need !== null && countAt(boardId, postId, db) >= need) cancelRequests(boardId, postId, null, db);
+}
+function countAt(boardId: number, postId: number, db: DB): number {
+  return (db.prepare('SELECT COUNT(*) c FROM assignments WHERE board_id=? AND post_id=?').get(boardId, postId) as { c: number }).c;
 }
 /** 라인 부동(세움)/해제. 부동이면 빈 자리로 치지 않고 요청도 닫는다. */
 export function setStopped(boardId: number, postId: number, stopped: boolean, db: DB = getDb()): void {
@@ -175,14 +195,17 @@ export type SendResult = { sent: number; candidates: { name: string; reasons: st
 export const VACATING_KINDS: AttendanceKind[] = ['결근', '연차', '병가'];
 export const OPTIONAL_KINDS: AttendanceKind[] = ['반차', '조퇴', '교육'];
 /** 근태 표시. 결근·연차·병가는 자리를 비우고 대체 요청. 반차·조퇴·교육은 request=true 일 때만 비우고 요청, 아니면 기록만. 지각은 기록만. kind=null 이면 지움. */
-export function setAttendance(boardId: number, postId: number | null, personId: number, kind: AttendanceKind | null, note: string | null, db: DB = getDb(), request = false): SendResult {
+export function setAttendance(boardId: number, postId: number | null, personId: number, kind: AttendanceKind | null, note: string | null, db: DB = getDb(), request?: boolean): SendResult {
   const b = db.prepare('SELECT date, shift FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift };
   if (!kind) { db.prepare('DELETE FROM attendance WHERE date=? AND shift=? AND person_id=?').run(b.date, b.shift, personId); return { sent: 0, candidates: [] }; }
   db.prepare('INSERT INTO attendance (date, shift, person_id, kind, note) VALUES (?,?,?,?,?) ON CONFLICT(date, shift, person_id) DO UPDATE SET kind=excluded.kind, note=excluded.note').run(b.date, b.shift, personId, kind, note);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action, detail) VALUES (?,?,?,'근태',?)").run(boardId, postId, personId, kind);
-  if (postId && (VACATING_KINDS.includes(kind) || (request && OPTIONAL_KINDS.includes(kind)))) {
+  const send = request ?? VACATING_KINDS.includes(kind);
+  if (postId && (VACATING_KINDS.includes(kind) || (send && OPTIONAL_KINDS.includes(kind)))) {
     removePerson(boardId, postId, personId, true, db);
-    return sendRequests(boardId, postId, personId, db);
+    if (send) return sendRequests(boardId, postId, personId, db);
+    // 요청 없이 자리만 비움: 남은 인원으로 충분하다는 뜻이므로 필요 인원을 지금 인원으로 맞춘다
+    db.prepare('UPDATE board_posts SET need=COALESCE(need, ?) WHERE board_id=? AND post_id=?').run(countAt(boardId, postId, db), boardId, postId);
   }
   return { sent: 0, candidates: [] };
 }
@@ -193,7 +216,15 @@ export function proposeBoard(boardId: number, db: DB = getDb()): void {
 }
 
 export function setProduct(boardId: number, postId: number, product: string | null, db: DB = getDb()): void {
+  const before = db.prepare('SELECT product FROM board_posts WHERE board_id=? AND post_id=?').get(boardId, postId) as { product: string | null } | undefined;
   db.prepare('INSERT INTO board_posts (board_id, post_id, product) VALUES (?,?,?) ON CONFLICT(board_id, post_id) DO UPDATE SET product=excluded.product').run(boardId, postId, product || null);
+  // 제품이 바뀌면 그 제품으로 섰던 날의 인원을 필요 인원으로 제안한다
+  if (product && product !== (before?.product ?? null)) {
+    const b = db.prepare('SELECT date, factory_id FROM boards WHERE id=?').get(boardId) as { date: string; factory_id: number };
+    const counts = (db.prepare(`SELECT COUNT(*) c FROM assignments a JOIN boards bo ON bo.id=a.board_id JOIN board_posts bp ON bp.board_id=a.board_id AND bp.post_id=a.post_id
+      WHERE a.post_id=? AND bp.product=? AND bo.date>=? AND bo.date<? GROUP BY a.board_id`).all(postId, product, addDays(b.date, -365), b.date) as { c: number }[]).map((r) => r.c);
+    if (counts.length) db.prepare('UPDATE board_posts SET need=? WHERE board_id=? AND post_id=?').run(typicalHeadcount(counts, 1), boardId, postId);
+  }
 }
 export function addPerson(boardId: number, postId: number, personId: number, source = '수동', db: DB = getDb()): void {
   db.prepare('INSERT INTO board_posts (board_id, post_id) VALUES (?,?) ON CONFLICT DO NOTHING').run(boardId, postId);
@@ -206,11 +237,12 @@ function ensureBp(boardId: number, postId: number, db: DB): void {
 }
 export function removePerson(boardId: number, postId: number, personId: number, absent: boolean, db: DB = getDb()): void {
   db.prepare('DELETE FROM assignments WHERE board_id=? AND post_id=? AND person_id=?').run(boardId, postId, personId);
-  if (absent) { ensureBp(boardId, postId, db); db.prepare('UPDATE board_posts SET vacant=1 WHERE board_id=? AND post_id=?').run(boardId, postId); }
+  if (absent) ensureBp(boardId, postId, db);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action) VALUES (?,?,?,?)").run(boardId, postId, personId, absent ? '결근' : '빼기');
 }
 export function clearVacancy(boardId: number, postId: number, db: DB = getDb()): void {
-  db.prepare('UPDATE board_posts SET vacant=0 WHERE board_id=? AND post_id=?').run(boardId, postId);
+  ensureBp(boardId, postId, db);
+  db.prepare('UPDATE board_posts SET vacant=0, need=? WHERE board_id=? AND post_id=?').run(countAt(boardId, postId, db), boardId, postId);
   db.prepare("UPDATE requests SET status='취소', responded_at=datetime('now','localtime') WHERE board_id=? AND post_id=? AND status='발송'").run(boardId, postId);
 }
 
@@ -244,7 +276,8 @@ export function sendRequests(boardId: number, postId: number, vacatedId: number 
     sendMessage(c.personId, '요청', requestMessage({ date: b.date, shift: b.shift, factory: fac, post: post.name, product }), `/r/${t}`, db);
   });
   ensureBp(boardId, postId, db);
-  db.prepare('UPDATE board_posts SET vacant=1 WHERE board_id=? AND post_id=?').run(boardId, postId);
+  // 필요 인원이 안 정해진 자리면 지금 인원보다 한 명 더 필요한 것으로 본다
+  db.prepare('UPDATE board_posts SET vacant=1, need=COALESCE(need, ?) WHERE board_id=? AND post_id=?').run(countAt(boardId, postId, db) + 1, boardId, postId);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action, detail) VALUES (?,?,?,'대체요청',?)").run(boardId, postId, vacatedId, `${ranked.length}명`);
   return { sent: ranked.length, candidates: ranked.map((c) => ({ name: c.name, reasons: c.reasons })) };
 }
@@ -287,8 +320,8 @@ export function respond(tok: string, action: 'accept' | 'decline', db: DB = getD
 export function autoFill(boardId: number, db: DB = getDb()): { filled: number; lines: number; need: number } {
   const b = db.prepare('SELECT date, shift, factory_id, status FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift; factory_id: number; status: string };
   if (b.status === '확정') return { filled: 0, lines: 0, need: 0 };
-  const targets = db.prepare(`SELECT bp.post_id, bp.product FROM board_posts bp JOIN posts po ON po.id=bp.post_id
-    WHERE bp.board_id=? AND po.kind='machine' AND po.unmanned=0 AND COALESCE(bp.stopped,0)=0 AND bp.product IS NOT NULL AND bp.product<>'' ORDER BY po.sort`).all(boardId) as { post_id: number; product: string }[];
+  const targets = db.prepare(`SELECT bp.post_id, bp.product, bp.need FROM board_posts bp JOIN posts po ON po.id=bp.post_id
+    WHERE bp.board_id=? AND po.kind='machine' AND po.unmanned=0 AND COALESCE(bp.stopped,0)=0 AND bp.product IS NOT NULL AND bp.product<>'' ORDER BY po.sort`).all(boardId) as { post_id: number; product: string; need: number | null }[];
   const since = addDays(b.date, -365);
   const histCounts = db.prepare(`SELECT a.post_id, bp.product, COUNT(*) c FROM assignments a JOIN boards bo ON bo.id=a.board_id
     JOIN board_posts bp ON bp.board_id=a.board_id AND bp.post_id=a.post_id WHERE bo.factory_id=? AND bo.date>=? AND bo.date<? GROUP BY a.board_id, a.post_id`).all(b.factory_id, since, b.date) as { post_id: number; product: string | null; c: number }[];
@@ -298,8 +331,8 @@ export function autoFill(boardId: number, db: DB = getDb()): { filled: number; l
   for (const t of targets) {
     const same = histCounts.filter((h) => h.post_id === t.post_id && h.product === t.product).map((h) => h.c);
     const any = histCounts.filter((h) => h.post_id === t.post_id).map((h) => h.c);
-    const want = typicalHeadcount(same.length ? same : any, 1);
-    const have = (db.prepare('SELECT COUNT(*) c FROM assignments WHERE board_id=? AND post_id=?').get(boardId, t.post_id) as { c: number }).c;
+    const want = t.need ?? typicalHeadcount(same.length ? same : any, 1);
+    const have = countAt(boardId, t.post_id, db);
     if (have >= want) continue;
     need += want - have;
     const picks = rankCandidates({ date: b.date, shift: b.shift, postId: t.post_id, product: t.product, ...ctx, excludeIds: taken, limit: want - have });

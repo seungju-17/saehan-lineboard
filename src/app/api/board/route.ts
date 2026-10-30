@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { type AttendanceKind, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, nextCandidates, removePerson, sendRequests, setProduct, unconfirmBoard, autoFill } from '@/lib/repo';
+import { type AttendanceKind, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, nextCandidates, removePerson, sendRequests, setProduct, unconfirmBoard, autoFill, setNeed } from '@/lib/repo';
 import type { Shift } from '@/lib/shift';
 
 type Key = { date: string; shift: Shift; factory: number };
@@ -25,6 +25,7 @@ type Action =
   | { action: 'next'; postId: number }
   | { action: 'cancel'; postId: number }
   | { action: 'cancel_requests'; postId: number; requestId?: number }
+  | { action: 'need'; postId: number; need: number | null }
   | { action: 'stop'; postId: number; stopped: boolean }
   | { action: 'note'; note: string | null }
   | { action: 'attend'; postId: number | null; personId: number; kind: AttendanceKind | null; note?: string | null; request?: boolean }
@@ -52,9 +53,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       case 'next': extra = nextCandidates(board.id, body.postId); break;
       case 'cancel': clearVacancy(board.id, body.postId); break;
       case 'cancel_requests': extra = cancelRequests(board.id, body.postId, body.requestId ?? null); break;
+      case 'need': setNeed(board.id, body.postId, body.need ?? null); break;
       case 'stop': setStopped(board.id, body.postId, !!body.stopped); break;
       case 'note': setNote(board.id, body.note ?? null); break;
-      case 'attend': extra = setAttendance(board.id, body.postId ?? null, body.personId, body.kind ?? null, body.note ?? null, undefined, !!body.request); break;
+      case 'attend': extra = setAttendance(board.id, body.postId ?? null, body.personId, body.kind ?? null, body.note ?? null, undefined, typeof body.request === 'boolean' ? body.request : undefined); break;
       case 'propose': proposeBoard(board.id); break;
       case 'autofill': extra = autoFill(board.id); break;
       case 'confirm': extra = confirmBoard(board.id); break;
