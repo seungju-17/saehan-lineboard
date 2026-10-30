@@ -3,6 +3,7 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'r
 import { ATTENDANCE_KINDS, OPTIONAL_KINDS, VACATING_KINDS, isVacantPost, needFor, type AttendanceKind, type Board as BoardT, type RequestRow, type SendResult } from '@/lib/repo';
 import { addDays, currentShiftSeoul, fmtKo, fmtShort, groupsOn, todaySeoul, type Shift } from '@/lib/shift';
 import { ask } from '@/lib/ask';
+import { groupColor, zoneColor } from '@/lib/colors';
 
 const FACTORIES = [[1, '1공장'], [2, '2공장']] as const;
 type Popover = { kind: 'person'; postId: number; personId: number } | { kind: 'add'; postId: number } | { kind: 'vacancy'; postId: number } | { kind: 'line'; postId: number } | null;
@@ -134,17 +135,16 @@ export function Board(): React.ReactElement {
           </div>
           <div className="mt-1.5 text-sm text-ink-2 flex flex-wrap items-center gap-x-2">
             {board?.status === '확정'
-              ? <span className="inline-flex items-center gap-1.5 font-semibold text-ok"><i className="w-1.5 h-1.5 rounded-full bg-ok" />{twoStep ? '결정됨' : '확정됨'}{board?.confirmed_at && <span className="font-normal text-ink-3">{board.confirmed_at.slice(11, 16)}</span>}</span>
+              ? <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded font-semibold text-ok bg-ok-bg"><i className="w-1.5 h-1.5 rounded-full bg-ok" />{twoStep ? '결정됨' : '확정됨'}{board?.confirmed_at && <span className="font-normal">{board.confirmed_at.slice(11, 16)}</span>}</span>
               : board?.status === '입안'
-              ? <span className="inline-flex items-center gap-1.5 font-semibold text-brand"><i className="w-1.5 h-1.5 rounded-full bg-brand" />입안됨 · 결정 대기</span>
-              : <span className="inline-flex items-center gap-1.5"><i className="w-1.5 h-1.5 rounded-full bg-ink-3" />작성 중</span>}
+              ? <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded font-semibold text-wait bg-wait-bg"><i className="w-1.5 h-1.5 rounded-full bg-wait" />입안됨 · 결정 대기</span>
+              : <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded font-semibold text-ink-2 bg-chip"><i className="w-1.5 h-1.5 rounded-full bg-ink-3" />작성 중</span>}
             {board && <>
-              <span className="text-line">|</span>
               <span>근무 <b className="text-ink">{total}</b>명{(men || women) ? <span className="text-ink-3"> (남 {men} · 여 {women})</span> : null}</span>
               <span>가동 <b className="text-ink">{runningLines}</b>라인</span>
-              {stoppedCount > 0 && <span>부동 <b className="text-ink">{stoppedCount}</b></span>}
-              {vacantCount > 0 && <span className="text-vac">비어 있음 <b>{vacantCount}</b></span>}
-              {waiting > 0 && <span>요청 대기 <b className="text-ink">{waiting}</b></span>}
+              {stoppedCount > 0 && <span className="inline-flex items-center h-6 px-2 rounded bg-chip text-ink-2">부동 <b className="ml-1 text-ink">{stoppedCount}</b></span>}
+              {vacantCount > 0 && <span className="inline-flex items-center h-6 px-2 rounded bg-vac text-white font-semibold">비어 있음 {vacantCount}</span>}
+              {waiting > 0 && <span className="inline-flex items-center h-6 px-2 rounded bg-wait-bg text-wait font-semibold">요청 대기 {waiting}</span>}
             </>}
           </div>
         </div>
@@ -184,7 +184,7 @@ export function Board(): React.ReactElement {
             const shown = collapse ? g.posts.filter((p) => !isIdle(p)) : g.posts;
             return (
             <tbody key={g.name}>
-              <tr><td colSpan={4} className="pl-4 sm:pl-5 pt-4 pb-1"><div className="flex items-center gap-3 text-[13px] font-semibold text-ink-3">{g.name}
+              <tr><td colSpan={4} className="pl-4 sm:pl-5 pr-4 pt-3 pb-1.5" style={{ background: zoneColor(g.name).band }}><div className="flex items-center gap-3 text-[13px] font-bold" style={{ color: zoneColor(g.name).ink }}>{g.name}<span className="font-normal text-ink-2">{g.posts.filter((p) => (byPost.get(p.id)?.length ?? 0) > 0).length ? `${g.posts.reduce((n, p) => n + (byPost.get(p.id)?.length ?? 0), 0)}명` : ''}</span>
                 {idleCount > 1 && <button onClick={() => setShowIdle((v) => ({ ...v, [g.name]: !v[g.name] }))} className="font-normal text-ink-3 hover:text-ink underline decoration-line underline-offset-2">{collapse ? `쉬는 라인 ${idleCount}개 보기` : '쉬는 라인 접기'}</button>}
               </div></td></tr>
               {shown.map((p) => {
@@ -200,9 +200,9 @@ export function Board(): React.ReactElement {
                   <tr key={p.id} className={`border-t border-line-2 ${vacant ? 'bg-vac-bg' : ''} ${idle || stopped ? 'text-ink-3' : ''} ${stopped ? 'bg-ground/60' : ''}`}>
                     <td className="pl-4 sm:pl-5 pr-2 sm:pr-3 py-2.5 align-middle">
                       <div className="relative flex items-center gap-2 sm:gap-2.5">
-                        <i className={`w-1 h-5 rounded-full shrink-0 ${vacant ? 'bg-vac' : stopped || idle ? 'bg-line' : unmanned ? 'bg-ink-3' : 'bg-brand'}`} aria-hidden />
+                        <i className="w-1.5 h-6 rounded-full shrink-0" style={{ background: vacant ? '#c8362b' : stopped || idle ? '#e3e7ee' : zoneColor(p.zone).ink }} aria-hidden />
                         <button disabled={locked} onClick={() => setPop({ kind: 'line', postId: p.id })} className="text-left disabled:cursor-default">
-                          <div className={`text-[16px] sm:text-[17px] font-semibold leading-5 ${idle || stopped ? 'text-ink-3' : 'text-ink'}`}>{p.code}{stopped && <span className="ml-1.5 text-[12px] font-semibold text-ink-2 bg-chip px-1.5 rounded">부동</span>}{unmanned && <span className="ml-1.5 text-[12px] font-normal text-ink-3">무인</span>}{Number(p.fixed) === 1 && <span className="ml-1.5 text-[12px] font-normal text-ink-3">직책</span>}</div>
+                          <div className={`text-[16px] sm:text-[17px] font-bold leading-5 ${idle || stopped ? 'text-ink-3' : ''}`} style={idle || stopped ? undefined : { color: vacant ? '#c8362b' : zoneColor(p.zone).ink }}>{p.code}{stopped && <span className="ml-1.5 text-[12px] font-semibold text-ink-2 bg-chip px-1.5 rounded">부동</span>}{unmanned && <span className="ml-1.5 text-[12px] font-normal text-ink-3">무인</span>}{Number(p.fixed) === 1 && <span className="ml-1.5 text-[12px] font-normal text-ink-3">직책</span>}</div>
                           {!machine && <div className="text-[13px] text-ink-3 leading-4">{p.name}</div>}
                         </button>
                         {pop?.kind === 'line' && pop.postId === p.id && (
@@ -229,7 +229,9 @@ export function Board(): React.ReactElement {
                           return (
                           <span key={a.id} className="relative">
                             <button data-chip="person" disabled={locked} onClick={() => setPop({ kind: 'person', postId: p.id, personId: a.person_id })}
-                              className={`h-8 px-3 rounded-md text-sm font-medium disabled:cursor-default ${a.source === '대체' ? 'bg-ok-bg text-ok hover:bg-ok/15' : a.source === '자동' ? 'bg-brand-soft text-brand hover:bg-brand/15' : 'bg-chip text-ink hover:bg-line'}`}>
+                              className={`h-8 pl-2.5 pr-3 rounded-md text-sm font-medium disabled:cursor-default border-l-4 hover:brightness-95 ${a.source === '자동' ? 'border-dashed' : ''}`}
+                              style={{ background: a.source === '대체' ? '#e8f5ee' : groupColor(a.grp, a.work_type).bg, color: a.source === '대체' ? '#1d7a4a' : '#1c2230', borderLeftColor: a.source === '대체' ? '#1d7a4a' : groupColor(a.grp, a.work_type).ink }}
+                              title={`${groupColor(a.grp, a.work_type).label || a.grp}${a.source === '대체' ? ' · 대체 투입' : a.source === '자동' ? ' · 자동 채우기' : ''}`}>
                               {a.name}{away ? <span className="ml-1 text-[11px] font-normal text-ink-3">{a.home_factory_id}공장</span> : null}{att && <span className="ml-1 text-[11px] font-semibold text-vac">{att.kind}</span>}
                             </button>
                             {pop?.kind === 'person' && pop.postId === p.id && pop.personId === a.person_id && (
@@ -357,7 +359,13 @@ function Rail({ board, date, shift, onCancel }: { board: BoardT | null; date: st
           <dt className="text-ink-2">{fmtShort(date)}</dt><dd>주간 <b>{g.day}조</b> · 야간 <b>{g.night}조</b> · <span className="text-ink-2">휴무 {g.off}조</span></dd>
           <dt className="text-ink-2">{fmtShort(addDays(date, 1))}</dt><dd>주간 <b>{gt.day}조</b> · 야간 <b>{gt.night}조</b> · <span className="text-ink-2">휴무 {gt.off}조</span></dd>
         </dl>
-        <p className="px-4 pb-3.5 text-[13px] text-ink-3">{shift === '주간' ? `오늘 주간은 ${g.day}조 근무, ${g.off}조가 대체 1순위` : `오늘 야간은 ${g.night}조 근무, ${g.off}조가 대체 1순위`}</p>
+        <p className="px-4 pb-2 text-[13px] text-ink-3">{shift === '주간' ? `오늘 주간은 ${g.day}조 근무, ${g.off}조가 대체 1순위` : `오늘 야간은 ${g.night}조 근무, ${g.off}조가 대체 1순위`}</p>
+        <div className="px-4 pb-3.5 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-ink-2">
+          {(['A', 'B', 'C'] as const).map((x) => <span key={x} className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: groupColor(x).ink }} />{x}조</span>)}
+          <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: groupColor(null, '주간고정').ink }} />주간고정</span>
+          <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: groupColor(null, '임시').ink }} />임시</span>
+          <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm bg-ok" />대체 투입</span>
+        </div>
       </section>
     </aside>
   );

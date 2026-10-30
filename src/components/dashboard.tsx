@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Stats, Kpi } from '@/lib/stats';
 import { currentShiftSeoul, fmtKo, fmtShort, todaySeoul, type Shift } from '@/lib/shift';
+import { groupColor } from '@/lib/colors';
 
 /* 차트 색: dataviz 검증기를 통과한 범주 팔레트 5칸(고정 순서). 글자는 항상 글자색. */
 const SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'];
@@ -88,9 +89,9 @@ function KpiTile({ k, baseline }: { k: Kpi; baseline: { date: string; label: str
   const cls = k.delta === null || k.delta === 0 ? 'text-ink-3' : good === null ? 'text-ink-2' : good ? 'text-ok' : 'text-vac';
   const base = baseline ? `${fmtShort(baseline.date).split(' ')[0]} 같은 조 대비` : '비교할 지난 근무 없음';
   return (
-    <div className="bg-white border border-line rounded-xl px-4 py-3.5 min-w-0">
+    <div className="bg-white border border-line rounded-xl px-4 py-3.5 min-w-0 border-t-4" style={{ borderTopColor: k.key === 'vacant' ? (Number(k.value) > 0 ? '#c8362b' : '#1d7a4a') : k.key === 'waiting' ? (Number(k.value) > 0 ? '#b7791f' : '#e3e7ee') : k.key === 'rate' ? '#1d7a4a' : k.key === 'temps' ? '#6b4e16' : '#1b2537' }}>
       <div className="text-[13px] text-ink-2 truncate">{k.label}</div>
-      <div className={`mt-1 text-[28px] font-semibold leading-none tabular-nums ${k.small ? 'text-ink-2' : ''}`}>{k.value}<span className="ml-0.5 text-[14px] font-normal text-ink-3">{k.unit}</span></div>
+      <div className={`mt-1 text-[28px] font-semibold leading-none tabular-nums ${k.small ? 'text-ink-2' : ''}`} style={{ color: k.key === 'vacant' && Number(k.value) > 0 ? '#c8362b' : k.key === 'waiting' && Number(k.value) > 0 ? '#b7791f' : undefined }}>{k.value}<span className="ml-0.5 text-[14px] font-normal text-ink-3">{k.unit}</span></div>
       {k.denom && <div className="mt-1 text-[12px] text-ink-2 tabular-nums">{k.denom}{k.small && <span className="ml-1.5 text-ink-3 bg-chip px-1 rounded">표본 적음</span>}</div>}
       <div className={`mt-1 text-[12px] ${cls} tabular-nums`}>
         {k.delta === null ? <span className="text-ink-3">{k.key === 'waiting' ? '지금 기다리는 중' : k.key === 'rate' ? (k.small ? '5자리 넘으면 의미 있음' : '요청한 자리 기준') : base}</span>
@@ -128,17 +129,19 @@ function HBars({ rows, unit }: { rows: { label: string; value: number; note?: st
 }
 
 /** 세로로 두툼한 분할 막대: 부분-전체를 한눈에. 도넛 대신. */
+/** 근무자 구성 색은 배치표의 조 색과 같다 (A 파랑, B 초록, C 주황, 주간고정 갈색, 임시 회색) */
+function compColor(label: string): string { return label === '주간고정' ? groupColor(null, '주간고정').ink : label === '임시' ? groupColor(null, '임시').ink : groupColor(label.replace('조', '')).ink; }
 function Segmented({ parts }: { parts: { label: string; count: number }[] }): React.ReactElement {
   const total = parts.reduce((s, p) => s + p.count, 0);
   if (total === 0) return <Empty>오늘 배치된 사람이 없습니다.</Empty>;
   return (
     <div className="flex flex-col gap-3">
       <div className="flex h-9 w-full gap-[2px] rounded overflow-hidden">
-        {parts.map((p, i) => p.count > 0 && <div key={p.label} title={`${p.label} ${p.count}명`} style={{ width: `${(p.count / total) * 100}%`, background: SERIES[i] }} />)}
+        {parts.map((p) => p.count > 0 && <div key={p.label} title={`${p.label} ${p.count}명`} style={{ width: `${(p.count / total) * 100}%`, background: compColor(p.label) }} />)}
       </div>
       <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[14px]">
-        {parts.map((p, i) => (
-          <li key={p.label} className="flex items-center gap-2"><i className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SERIES[i] }} /><span className="flex-1 truncate">{p.label}</span><span className="tabular-nums">{p.count}<span className="text-ink-3 text-[12px]"> ({total ? Math.round((p.count / total) * 100) : 0}%)</span></span></li>
+        {parts.map((p) => (
+          <li key={p.label} className="flex items-center gap-2"><i className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: compColor(p.label) }} /><span className="flex-1 truncate">{p.label}</span><span className="tabular-nums">{p.count}<span className="text-ink-3 text-[12px]"> ({total ? Math.round((p.count / total) * 100) : 0}%)</span></span></li>
         ))}
       </ul>
     </div>
