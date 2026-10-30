@@ -251,7 +251,7 @@ export function Board(): React.ReactElement {
                                 {reqs.length === 0 && <div className="px-3 py-2 text-sm text-ink-2">아직 요청하지 않았습니다</div>}
                                 {reqs.map((r) => (
                                   <div key={r.id} className="px-3 py-1.5 text-sm flex items-center gap-3"><span className="font-medium w-16 shrink-0">{r.name}</span><StatusTag status={r.status} />
-                                    {r.status === '발송' && <button onClick={() => act({ action: 'cancel_requests', postId: p.id, requestId: r.id }).then((d) => d && setFlash(`${r.name} 요청 취소`))} className="ml-auto h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg shrink-0">취소</button>}</div>
+                                    {r.status === '발송' && <button onClick={() => act({ action: 'cancel_requests', postId: p.id, requestId: r.id }).then((d) => d && setFlash(`${r.name} 요청 취소`))} className="h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg shrink-0">취소</button>}</div>
                                 ))}
                                 <div className="border-t border-line-2 mt-1">
                                   {open > 0 && <PopBtn onClick={async () => { setPop(null); if (!(await ask(`${open}명에게 보낸 요청을 모두 취소합니다.`))) return; const d = await act({ action: 'cancel_requests', postId: p.id }); if (d) setFlash(`요청 ${(d as BoardT & { cancelled: number }).cancelled}건 취소`); }}>전체 취소 ({open}명)</PopBtn>}
@@ -333,7 +333,7 @@ function Rail({ board, date, shift, onCancel }: { board: BoardT | null; date: st
                 <div className="text-[14px] font-semibold">{code}<span className="ml-2 font-normal text-ink-2">{list[0].vacated_name ? `${list[0].vacated_name} 결근` : '빈 자리'}</span></div>
                 <ul className="mt-1 flex flex-col">
                   {list.sort((a, b) => a.rank - b.rank).map((r) => (
-                    <li key={r.id} className="flex items-center gap-2 h-7 text-[14px]"><span className="w-14 truncate">{r.name}</span><StatusTag status={r.status} /><span className="ml-auto text-[13px] text-ink-3 tabular-nums">{r.sent_at.slice(11, 16)}</span>{r.status === '발송' && onCancel && <button onClick={() => onCancel(r)} className="h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg">취소</button>}</li>
+                    <li key={r.id} className="flex items-center gap-2 h-7 text-[14px]"><span className="w-14 truncate">{r.name}</span><StatusTag status={r.status} />{r.status === '발송' && onCancel && <button onClick={() => onCancel(r)} className="h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg">취소</button>}<span className="ml-auto text-[13px] text-ink-3 tabular-nums">{r.sent_at.slice(11, 16)}</span></li>
                   ))}
                 </ul>
               </li>

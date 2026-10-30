@@ -52,10 +52,10 @@ export function Requests({ initial }: { initial: RequestRow[] }): React.ReactEle
                       <span className="w-5 text-xs text-ink-3">{r.rank}</span>
                       <span className="font-medium w-16">{r.name}</span>
                       <StatusTag status={r.status} />
+                      {r.status === '발송' && <button onClick={() => act(r, 'cancel_requests', r.id)} className="h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg shrink-0">취소</button>}
                       <span className="text-sm text-ink-3 truncate">{r.reason}</span>
                       <span className="ml-auto text-xs text-ink-3 shrink-0">{r.sent_at.slice(11, 16)}{r.responded_at ? ` → ${r.responded_at.slice(11, 16)}` : ''}</span>
                       {r.status === '발송' && <a href={`/r/${r.token}`} target="_blank" rel="noreferrer" className="text-xs text-ink-2 underline shrink-0">수락 화면</a>}
-                      {r.status === '발송' && <button onClick={() => act(r, 'cancel_requests', r.id)} className="h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg shrink-0">취소</button>}
                     </li>
                   ))}
                 </ul>
