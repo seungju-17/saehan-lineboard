@@ -7,12 +7,14 @@
 ## 실행
 
 ```bash
-pnpm install
-pnpm seed      # data/lineboard.db 생성 (직원 67명 + 2025 실제 배치표 이력)
-pnpm dev       # http://localhost:3000  비밀번호: saehan
+npm install
+npm run seed   # data/lineboard.db 생성 (직원 67명 + 2025 실제 배치표 이력)
+npm run dev    # http://localhost:3000  비밀번호: saehan
 ```
 
-Node 20 이상, pnpm. 외부 서비스·DB 설치 없음 (SQLite 파일 하나).
+Node 20 이상. pnpm이 있으면 `pnpm install / pnpm seed / pnpm dev`도 됩니다.
+Windows PowerShell에서 `npm`이 보안 정책으로 막히면 `npm.cmd`로 입력하세요.
+외부 서비스·DB 설치 없음 (SQLite 파일 하나).
 
 ## 화면
 
