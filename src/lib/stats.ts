@@ -1,11 +1,12 @@
 /** 현황 화면용 집계. 모두 배치표 이력에서 계산한다. 추정치 없음. */
 import { getDb, type DB } from './db';
 import { getBoard, posts } from './repo';
-import { addDays, type Shift } from './shift';
+import { addDays, fmtShort, sameGroupBefore, type Shift } from './shift';
 
-export type Kpi = { key: string; label: string; value: number; unit: string; delta: number | null; upIsGood: boolean | null; pct?: boolean };
+export type Kpi = { key: string; label: string; value: number; unit: string; delta: number | null; upIsGood: boolean | null; pct?: boolean; denom?: string; small?: boolean; note?: string };
 export type Stats = {
   date: string; shift: Shift; factory_id: number; days: number; since: string;
+  baseline: { date: string; label: string } | null;
   kpis: Kpi[];
   byLine: { code: string; avg: number; boards: number }[];
   composition: { label: string; count: number }[];
@@ -39,8 +40,12 @@ export function getStats(date: string, shift: Shift, factoryId: number, days = 3
   const since = addDays(date, -days);
   const today = getBoard(date, shift, factoryId, db);
   const now = snapshot(today.id, factoryId, db);
-  const yb = db.prepare('SELECT id FROM boards WHERE date=? AND shift=? AND factory_id=?').get(addDays(date, -1), shift, factoryId) as { id: number } | undefined;
+  // 비교 기준: 어제가 아니라 "같은 조가 지난번 같은 근무를 한 날". 3조 2교대라 어제는 다른 사람들일 수 있다.
+  const recent = db.prepare('SELECT id, date FROM boards WHERE shift=? AND factory_id=? AND date<? ORDER BY date DESC LIMIT 14').all(shift, factoryId, date) as { id: number; date: string }[];
+  const baseDate = sameGroupBefore(date, shift, recent.map((r) => r.date));
+  const yb = recent.find((r) => r.date === baseDate);
   const prev = yb ? snapshot(yb.id, factoryId, db) : null;
+  const baseline = yb ? { date: yb.date, label: `같은 조 지난 근무 ${fmtShort(yb.date)}` } : null;
 
   const reqAgg = db.prepare(`SELECT COUNT(*) sent, SUM(r.status IN ('수락','거절')) responded, SUM(r.status='수락') accepted
     FROM requests r JOIN boards b ON b.id=r.board_id WHERE b.factory_id=? AND b.date>=? AND b.date<=?`).get(factoryId, since, date) as { sent: number; responded: number | null; accepted: number | null };
@@ -56,8 +61,10 @@ export function getStats(date: string, shift: Shift, factoryId: number, days = 3
     { key: 'lines', label: '가동 라인', value: now.lines, unit: '라인', delta: d(now.lines, prev?.lines), upIsGood: null },
     { key: 'vacant', label: '비어 있음', value: now.vacant, unit: '자리', delta: d(now.vacant, prev?.vacant), upIsGood: false },
     { key: 'waiting', label: '요청 대기', value: now.waiting, unit: '건', delta: null, upIsGood: false },
-    { key: 'rate', label: `대체 성공률 ${days}일`, value: rate ?? 0, unit: '%', delta: null, upIsGood: true, pct: true },
-    { key: 'temp', label: '임시 인원 비율', value: tempShare, unit: '%', delta: d(tempShare, prevTemp), upIsGood: false, pct: true },
+    { key: 'rate', label: `대체 성공률 ${days}일`, value: rate ?? 0, unit: '%', delta: null, upIsGood: true, pct: true,
+      denom: slots.n ? `${slots.n}자리 중 ${slots.filled ?? 0}자리 채움` : '요청한 자리 없음', small: slots.n > 0 && slots.n < 5 },
+    { key: 'temp', label: '임시 인원 비율', value: tempShare, unit: '%', delta: d(tempShare, prevTemp), upIsGood: false, pct: true,
+      denom: `${now.workers}명 중 ${now.temps}명`, small: now.workers > 0 && now.workers < 5 },
   ];
 
   const byLineRows = db.prepare(`SELECT po.code, AVG(c) avg, COUNT(*) boards FROM (
@@ -93,5 +100,5 @@ export function getStats(date: string, shift: Shift, factoryId: number, days = 3
   for (const r of dailyRows) { const e = dm.get(r.date); if (e) { if (r.shift === '주간') e.day = r.c; else e.night = r.c; } }
   const daily = [...dm.entries()].map(([dt, v]) => ({ date: dt, ...v }));
 
-  return { date, shift, factory_id: factoryId, days, since, kpis, byLine, composition, funnel, topSubs, daily };
+  return { date, shift, factory_id: factoryId, days, since, baseline, kpis, byLine, composition, funnel, topSubs, daily };
 }

@@ -37,7 +37,7 @@ export function Dashboard(): React.ReactElement {
         <>
           {/* 1줄: 지표 카드 */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {s.kpis.map((k) => <KpiTile key={k.key} k={k} />)}
+            {s.kpis.map((k) => <KpiTile key={k.key} k={k} baseline={s.baseline} />)}
           </div>
 
           {/* 2줄: 라인별 인원 + 근무자 구성 */}
@@ -82,18 +82,20 @@ export function Dashboard(): React.ReactElement {
   );
 }
 
-function KpiTile({ k }: { k: Kpi }): React.ReactElement {
+function KpiTile({ k, baseline }: { k: Kpi; baseline: { date: string; label: string } | null }): React.ReactElement {
   const up = k.delta !== null && k.delta > 0, down = k.delta !== null && k.delta < 0;
   const good = k.upIsGood === null ? null : (up && k.upIsGood) || (down && !k.upIsGood);
   const cls = k.delta === null || k.delta === 0 ? 'text-ink-3' : good === null ? 'text-ink-2' : good ? 'text-ok' : 'text-vac';
+  const base = baseline ? `${fmtShort(baseline.date).split(' ')[0]} 같은 조 대비` : '비교할 지난 근무 없음';
   return (
     <div className="bg-white border border-line rounded-xl px-4 py-3.5 min-w-0">
       <div className="text-[13px] text-ink-2 truncate">{k.label}</div>
-      <div className="mt-1 text-[28px] font-semibold leading-none tabular-nums">{k.value}<span className="ml-0.5 text-[14px] font-normal text-ink-3">{k.unit}</span></div>
-      <div className={`mt-1.5 text-[12px] ${cls} tabular-nums`}>
-        {k.delta === null ? <span className="text-ink-3">{k.key === 'waiting' ? '지금 기다리는 중' : k.key === 'rate' ? '요청한 자리 중 채운 비율' : '어제 비교 없음'}</span>
-          : k.delta === 0 ? '어제와 같음'
-          : <>{up ? '▲' : '▼'} {Math.abs(k.delta)}{k.pct ? '%p' : k.unit} <span className="text-ink-3">어제 대비</span></>}
+      <div className={`mt-1 text-[28px] font-semibold leading-none tabular-nums ${k.small ? 'text-ink-2' : ''}`}>{k.value}<span className="ml-0.5 text-[14px] font-normal text-ink-3">{k.unit}</span></div>
+      {k.denom && <div className="mt-1 text-[12px] text-ink-2 tabular-nums">{k.denom}{k.small && <span className="ml-1.5 text-ink-3 bg-chip px-1 rounded">표본 적음</span>}</div>}
+      <div className={`mt-1 text-[12px] ${cls} tabular-nums`}>
+        {k.delta === null ? <span className="text-ink-3">{k.key === 'waiting' ? '지금 기다리는 중' : k.key === 'rate' ? (k.small ? '5자리 넘으면 의미 있음' : '요청한 자리 기준') : base}</span>
+          : k.delta === 0 ? <span>같음 <span className="text-ink-3">· {base}</span></span>
+          : <>{up ? '▲' : '▼'} {Math.abs(k.delta)}{k.pct ? '%p' : k.unit} <span className="text-ink-3">· {base}</span></>}
       </div>
     </div>
   );
@@ -174,6 +176,13 @@ function Lines({ rows }: { rows: { date: string; day: number | null; night: numb
     rows.forEach((r, i) => { const v = r[key]; if (v === null) { pen = false; return; } d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)} `; pen = true; });
     return d;
   };
+  // 표가 없는 날은 점선으로 건너뛴다. 없는 건 0이 아니라 "모름"이다.
+  const gaps = (key: 'day' | 'night'): string => {
+    let d = '', lastI = -1;
+    rows.forEach((r, i) => { const v = r[key]; if (v === null) return; if (lastI >= 0 && i - lastI > 1) d += `M${x(lastI).toFixed(1)},${y(rows[lastI][key]!).toFixed(1)} L${x(i).toFixed(1)},${y(v).toFixed(1)} `; lastI = i; });
+    return d;
+  };
+  const missing = rows.filter((r) => r.day === null && r.night === null).map((r) => r.date);
   const last = (key: 'day' | 'night'): { i: number; v: number } | null => { for (let i = rows.length - 1; i >= 0; i--) { const v = rows[i][key]; if (v !== null) return { i, v }; } return null; };
   const ticks = [0, top / 2, top];
   const series: { key: 'day' | 'night'; name: string; color: string }[] = [{ key: 'day', name: '주간', color: SERIES[0] }, { key: 'night', name: '야간', color: SERIES[1] }];
@@ -183,10 +192,12 @@ function Lines({ rows }: { rows: { date: string; day: number | null; night: numb
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="최근 14일 일별 근무 인원, 주간과 야간">
         {ticks.map((t) => <g key={t}><line x1={L} x2={W - R} y1={y(t)} y2={y(t)} stroke="#eef1f5" /><text x={L - 6} y={y(t) + 4} textAnchor="end" fontSize="11" fill="#667085">{t}</text></g>)}
         {rows.map((r, i) => (i % 3 === 0 || i === rows.length - 1) && <text key={r.date} x={x(i)} y={H - 8} textAnchor="middle" fontSize="11" fill="#667085">{fmtShort(r.date).split(' ')[0]}</text>)}
+        {series.map((sr) => <path key={sr.key + 'gap'} d={gaps(sr.key)} fill="none" stroke={sr.color} strokeWidth="1.5" strokeDasharray="3 4" opacity="0.6" />)}
         {series.map((sr) => <path key={sr.key} d={path(sr.key)} fill="none" stroke={sr.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />)}
         {series.map((sr) => { const e = last(sr.key); return e && <g key={sr.key + 'end'}><circle cx={x(e.i)} cy={y(e.v)} r="4" fill={sr.color} stroke="#fff" strokeWidth="2" /><text x={x(e.i) - 8} y={y(e.v) - 8} textAnchor="end" fontSize="12" fontWeight="600" fill="#1c2230">{e.v}</text></g>; })}
         {rows.map((r, i) => <title key={'t' + r.date}>{`${fmtShort(r.date)} 주간 ${r.day ?? '–'} · 야간 ${r.night ?? '–'}`}</title>)[0]}
       </svg>
+      <div className="text-[12px] text-ink-3">{missing.length === 0 ? '14일 모두 표가 있습니다' : `표 없는 날 ${missing.length}일: ${missing.map((d) => fmtShort(d).split(' ')[0]).join(', ')} (점선 구간)`}</div>
       <ul className="sr-only">{rows.map((r) => <li key={r.date}>{fmtShort(r.date)} 주간 {r.day ?? '없음'} 야간 {r.night ?? '없음'}</li>)}</ul>
     </div>
   );
