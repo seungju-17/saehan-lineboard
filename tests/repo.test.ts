@@ -44,6 +44,28 @@ describe('근태', () => {
     expect(isVacantPost(after.posts.find((p) => p.code === 'S-3')!, 0)).toBe(true);
     expect(r.sent).toBeGreaterThanOrEqual(0);
   });
+  it('병가·연차도 자리를 비우고 요청을 보낸다', () => {
+    const db = memDb();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    setAttendance(b.id, s3.id, 1, '병가', null, db);
+    const after = getBoard('2026-10-21', '주간', 2, db);
+    expect(after.assignments.some((a) => a.person_id === 1)).toBe(false);
+    expect(after.attendance[0].kind).toBe('병가');
+    expect(db.prepare("SELECT COUNT(*) c FROM logs WHERE action='대체요청'").get()).toEqual({ c: 1 });
+  });
+  it('조퇴는 기록만 하다가, 요청을 고르면 자리를 비우고 요청을 보낸다', () => {
+    const db = memDb();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    setAttendance(b.id, s3.id, 1, '조퇴', '14시', db);
+    expect(getBoard('2026-10-21', '주간', 2, db).assignments.some((a) => a.person_id === 1)).toBe(true);
+    setAttendance(b.id, s3.id, 1, '조퇴', '14시', db, true);
+    const after = getBoard('2026-10-21', '주간', 2, db);
+    expect(after.assignments.some((a) => a.person_id === 1)).toBe(false);
+    expect(after.attendance.map((a) => a.kind)).toEqual(['조퇴']);
+    expect(db.prepare("SELECT COUNT(*) c FROM logs WHERE action='대체요청'").get()).toEqual({ c: 1 });
+  });
   it('지각은 자리를 유지한 채 기록만 한다', () => {
     const db = memDb();
     const b = getBoard('2026-10-21', '주간', 2, db);

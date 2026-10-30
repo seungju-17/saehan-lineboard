@@ -10,7 +10,7 @@ export type Assignment = { id: number; post_id: number; person_id: number; sourc
 export type AttendanceRow = { person_id: number; kind: string; note: string | null; name: string };
 export const ATTENDANCE_KINDS = ['결근', '연차', '병가', '반차', '지각', '조퇴', '교육'] as const;
 export type AttendanceKind = typeof ATTENDANCE_KINDS[number];
-export type RequestRow = { id: number; board_id: number; post_id: number; person_id: number; vacated_person_id: number | null; rank: number; reason: string | null; status: string; token: string; channel: string; sent_at: string; expires_at: string | null; responded_at: string | null; name: string; affiliation: string | null; post_code: string; post_name: string; date: string; shift: Shift; factory_id: number; vacated_name: string | null; product: string | null };
+export type RequestRow = { id: number; board_id: number; post_id: number; person_id: number; vacated_person_id: number | null; rank: number; reason: string | null; status: string; token: string; channel: string; sent_at: string; expires_at: string | null; responded_at: string | null; name: string; affiliation: string | null; post_code: string; post_name: string; date: string; shift: Shift; factory_id: number; vacated_name: string | null; vacated_kind: string | null; product: string | null };
 export type Board = {
   id: number; date: string; shift: Shift; factory_id: number; status: '초안' | '입안' | '확정'; confirmed_at: string | null; copied_from: string | null; note: string | null;
   posts: (Post & { product: string | null; vacant: number; stopped: number })[];
@@ -91,8 +91,8 @@ export function getBoard(date: string, shift: Shift, factoryId: number, db: DB =
 }
 
 function requestsFor(where: string, db: DB): RequestRow[] {
-  return db.prepare(`SELECT r.*, p.name, p.affiliation, po.code AS post_code, po.name AS post_name, b.date, b.shift, b.factory_id, v.name AS vacated_name, bp.product
-    FROM requests r JOIN people p ON p.id=r.person_id JOIN posts po ON po.id=r.post_id JOIN boards b ON b.id=r.board_id LEFT JOIN people v ON v.id=r.vacated_person_id LEFT JOIN board_posts bp ON bp.board_id=r.board_id AND bp.post_id=r.post_id
+  return db.prepare(`SELECT r.*, p.name, p.affiliation, po.code AS post_code, po.name AS post_name, b.date, b.shift, b.factory_id, v.name AS vacated_name, t.kind AS vacated_kind, bp.product
+    FROM requests r JOIN people p ON p.id=r.person_id JOIN posts po ON po.id=r.post_id JOIN boards b ON b.id=r.board_id LEFT JOIN people v ON v.id=r.vacated_person_id LEFT JOIN attendance t ON t.date=b.date AND t.shift=b.shift AND t.person_id=r.vacated_person_id LEFT JOIN board_posts bp ON bp.board_id=r.board_id AND bp.post_id=r.post_id
     WHERE ${where} ORDER BY r.sent_at DESC, r.rank`).all() as RequestRow[];
 }
 export function allRequests(db: DB = getDb()): RequestRow[] { expireDue(db); return requestsFor('1=1', db).slice(0, 400); }
@@ -135,6 +135,8 @@ function rankContext(date: string, shift: Shift, factoryId: number, db: DB) {
   const today = new Set((db.prepare('SELECT a.person_id FROM assignments a JOIN boards b ON b.id=a.board_id WHERE b.date=?').all(date) as { person_id: number }[]).map((r) => r.person_id));
   // 오늘 결근·연차·병가로 빠진 사람은 다른 자리 후보로도 올리지 않는다 (지각·조퇴 등 기록만 한 사람은 그대로 근무 중이라 위에서 이미 걸러진다)
   for (const r of db.prepare("SELECT person_id FROM attendance WHERE date=? AND kind IN ('결근','연차','병가')").all(date) as { person_id: number }[]) today.add(r.person_id);
+  // 반차·조퇴·교육으로 자리를 비우고 요청을 보낸 사람도 그날은 뺀다 (자리에서 빠졌으면 요청 기록이 있다)
+  for (const r of db.prepare("SELECT DISTINCT r.vacated_person_id person_id FROM requests r JOIN boards b ON b.id=r.board_id WHERE b.date=? AND r.vacated_person_id IS NOT NULL").all(date) as { person_id: number }[]) today.add(r.person_id);
   const recent = new Map<number, number>();
   for (const r of db.prepare(`SELECT a.person_id FROM assignments a JOIN boards b ON b.id=a.board_id WHERE a.source='대체' AND b.date>=? AND b.date<?`).all(recentSince, date) as { person_id: number }[]) recent.set(r.person_id, (recent.get(r.person_id) ?? 0) + 1);
   return { people: people(db), experience: aggregateExperience(hist), assignedThatDay: today, recentSubs: recent, weekHours: weekHoursFor(date, db, st.shift_hours), shiftHours: st.shift_hours, maxWeekHours: st.week_max_hours };
@@ -168,16 +170,19 @@ export function setStopped(boardId: number, postId: number, stopped: boolean, db
 export function setNote(boardId: number, note: string | null, db: DB = getDb()): void {
   db.prepare('UPDATE boards SET note=? WHERE id=?').run(note && note.trim() ? note.trim() : null, boardId);
 }
-/** 근태 표시. 결근은 자리를 비우고 대체 요청, 연차·병가는 자리만 비움, 반차·지각·조퇴·교육은 기록만. kind=null 이면 지움. */
 export type SendResult = { sent: number; candidates: { name: string; reasons: string[] }[] };
-export function setAttendance(boardId: number, postId: number | null, personId: number, kind: AttendanceKind | null, note: string | null, db: DB = getDb()): SendResult {
+/** 자리를 비우는 근태(자동으로 대체 요청), 담당자가 요청 여부를 고르는 근태(반차·조퇴·교육), 기록만 하는 근태(지각) */
+export const VACATING_KINDS: AttendanceKind[] = ['결근', '연차', '병가'];
+export const OPTIONAL_KINDS: AttendanceKind[] = ['반차', '조퇴', '교육'];
+/** 근태 표시. 결근·연차·병가는 자리를 비우고 대체 요청. 반차·조퇴·교육은 request=true 일 때만 비우고 요청, 아니면 기록만. 지각은 기록만. kind=null 이면 지움. */
+export function setAttendance(boardId: number, postId: number | null, personId: number, kind: AttendanceKind | null, note: string | null, db: DB = getDb(), request = false): SendResult {
   const b = db.prepare('SELECT date, shift FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift };
   if (!kind) { db.prepare('DELETE FROM attendance WHERE date=? AND shift=? AND person_id=?').run(b.date, b.shift, personId); return { sent: 0, candidates: [] }; }
   db.prepare('INSERT INTO attendance (date, shift, person_id, kind, note) VALUES (?,?,?,?,?) ON CONFLICT(date, shift, person_id) DO UPDATE SET kind=excluded.kind, note=excluded.note').run(b.date, b.shift, personId, kind, note);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action, detail) VALUES (?,?,?,'근태',?)").run(boardId, postId, personId, kind);
-  if (postId && (kind === '결근' || kind === '연차' || kind === '병가')) {
+  if (postId && (VACATING_KINDS.includes(kind) || (request && OPTIONAL_KINDS.includes(kind)))) {
     removePerson(boardId, postId, personId, true, db);
-    if (kind === '결근') return sendRequests(boardId, postId, personId, db);
+    return sendRequests(boardId, postId, personId, db);
   }
   return { sent: 0, candidates: [] };
 }

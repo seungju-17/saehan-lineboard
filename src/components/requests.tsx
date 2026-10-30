@@ -35,7 +35,7 @@ export function Requests({ initial }: { initial: RequestRow[] }): React.ReactEle
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3.5 border-b border-line-2">
                   <span className="text-[17px] font-semibold">{fmtShort(f.date)} {f.shift} · {FAC[f.factory_id]} {f.post_code}</span>
                   {f.product && <span className="text-sm text-ink-2">{f.product}</span>}
-                  {f.vacated_name && <span className="text-sm text-ink-3">{f.vacated_name} 결근</span>}
+                  {f.vacated_name && <span className="text-sm text-ink-3">{f.vacated_name} {f.vacated_kind ?? '결근'}</span>}
                   {accepted
                     ? <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-ok bg-ok-bg px-2 h-6 rounded"><i className="w-1.5 h-1.5 rounded-full bg-ok" />{accepted.name} 수락</span>
                     : open.length ? <span className="text-sm text-ink-2 bg-chip px-2 h-6 inline-flex items-center rounded">응답 대기 {open.length}</span>

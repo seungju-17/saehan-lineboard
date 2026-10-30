@@ -27,7 +27,7 @@ type Action =
   | { action: 'cancel_requests'; postId: number; requestId?: number }
   | { action: 'stop'; postId: number; stopped: boolean }
   | { action: 'note'; note: string | null }
-  | { action: 'attend'; postId: number | null; personId: number; kind: AttendanceKind | null; note?: string | null }
+  | { action: 'attend'; postId: number | null; personId: number; kind: AttendanceKind | null; note?: string | null; request?: boolean }
   | { action: 'propose' }
   | { action: 'autofill' }
   | { action: 'confirm' }
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       case 'cancel_requests': extra = cancelRequests(board.id, body.postId, body.requestId ?? null); break;
       case 'stop': setStopped(board.id, body.postId, !!body.stopped); break;
       case 'note': setNote(board.id, body.note ?? null); break;
-      case 'attend': extra = setAttendance(board.id, body.postId ?? null, body.personId, body.kind ?? null, body.note ?? null); break;
+      case 'attend': extra = setAttendance(board.id, body.postId ?? null, body.personId, body.kind ?? null, body.note ?? null, undefined, !!body.request); break;
       case 'propose': proposeBoard(board.id); break;
       case 'autofill': extra = autoFill(board.id); break;
       case 'confirm': extra = confirmBoard(board.id); break;

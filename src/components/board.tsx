@@ -1,6 +1,6 @@
 'use client';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ATTENDANCE_KINDS, isVacantPost, type AttendanceKind, type Board as BoardT, type RequestRow, type SendResult } from '@/lib/repo';
+import { ATTENDANCE_KINDS, OPTIONAL_KINDS, VACATING_KINDS, isVacantPost, type AttendanceKind, type Board as BoardT, type RequestRow, type SendResult } from '@/lib/repo';
 import { addDays, currentShiftSeoul, fmtKo, fmtShort, groupsOn, todaySeoul, type Shift } from '@/lib/shift';
 import { ask } from '@/lib/ask';
 
@@ -106,11 +106,12 @@ export function Board(): React.ReactElement {
   }
   async function attend(p: PostT, personId: number, name: string, kind: AttendanceKind): Promise<void> {
     setPop(null);
-    if (kind === '결근' && !(await ask(`${name} 결근 처리하고 후보 3명에게 요청을 보냅니다.`))) return;
-    if ((kind === '연차' || kind === '병가') && !(await ask(`${name} ${kind}로 표시하고 자리를 비웁니다.`))) return;
-    const d = await act({ action: 'attend', postId: p.id, personId, kind });
+    let request = VACATING_KINDS.includes(kind);
+    if (request && !(await ask(`${name} ${kind} 처리하고 후보 3명에게 요청을 보냅니다.`))) return;
+    if (OPTIONAL_KINDS.includes(kind)) request = await ask(`${name} ${kind}로 표시합니다. 대체 요청도 보낼까요?`, { ok: '요청 보내기', cancel: '기록만' });
+    const d = await act({ action: 'attend', postId: p.id, personId, kind, request });
     if (!d) return;
-    if (kind === '결근') afterSend(p, d); else setFlash(`${name} ${kind} 표시했습니다`);
+    if (request) afterSend(p, d); else setFlash(`${name} ${kind} 표시했습니다`);
   }
 
   return (
@@ -330,7 +331,7 @@ function Rail({ board, date, shift, onCancel }: { board: BoardT | null; date: st
           <ul className="px-4 pb-3 flex flex-col gap-3">
             {[...byPost.entries()].map(([code, list]) => (
               <li key={code}>
-                <div className="text-[14px] font-semibold">{code}<span className="ml-2 font-normal text-ink-2">{list[0].vacated_name ? `${list[0].vacated_name} 결근` : '빈 자리'}</span></div>
+                <div className="text-[14px] font-semibold">{code}<span className="ml-2 font-normal text-ink-2">{list[0].vacated_name ? `${list[0].vacated_name} ${list[0].vacated_kind ?? '결근'}` : '빈 자리'}</span></div>
                 <ul className="mt-1 flex flex-col">
                   {list.sort((a, b) => a.rank - b.rank).map((r) => (
                     <li key={r.id} className="flex items-center gap-2 h-7 text-[14px]"><span className="w-14 truncate">{r.name}</span><StatusTag status={r.status} />{r.status === '발송' && onCancel && <button onClick={() => onCancel(r)} className="h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg">취소</button>}<span className="ml-auto text-[13px] text-ink-3 tabular-nums">{r.sent_at.slice(11, 16)}</span></li>

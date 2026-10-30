@@ -32,7 +32,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
         case 'cancel_requests': extra = cancelRequests(board.id, postId, body.requestId ? Number(body.requestId) : null); break;
         case 'stop': setStopped(board.id, postId, !!body.stopped); break;
         case 'note': setNote(board.id, (body.note as string | null) ?? null); break;
-        case 'attend': extra = setAttendance(board.id, body.postId ? postId : null, personId, (body.kind as AttendanceKind | null) ?? null, (body.note as string | null) ?? null); break;
+        case 'attend': extra = setAttendance(board.id, body.postId ? postId : null, personId, (body.kind as AttendanceKind | null) ?? null, (body.note as string | null) ?? null, undefined, !!body.request); break;
         case 'propose': proposeBoard(board.id); break;
         case 'autofill': extra = autoFill(board.id); break;
         case 'confirm': extra = confirmBoard(board.id); break;

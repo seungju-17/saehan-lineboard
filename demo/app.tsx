@@ -63,7 +63,7 @@ function PrintView(): React.ReactElement {
   return <PrintBoard b={b} factoryName={factoryName(factory)} action={<span className="text-xs text-ink-3">A4 한 장으로 인쇄되는 모양</span>} />;
 }
 
-function Confirm({ q, onDone }: { q: { message: string; resolve: (v: boolean) => void } | null; onDone: () => void }): React.ReactElement | null {
+function Confirm({ q, onDone }: { q: { message: string; ok?: string; cancel?: string; resolve: (v: boolean) => void } | null; onDone: () => void }): React.ReactElement | null {
   if (!q) return null;
   const answer = (v: boolean): void => { q.resolve(v); onDone(); };
   return (
@@ -71,8 +71,8 @@ function Confirm({ q, onDone }: { q: { message: string; resolve: (v: boolean) =>
       <div role="dialog" aria-modal="true" aria-labelledby="confirm-msg" className="bg-white rounded-xl p-5 w-full max-w-sm shadow-[0_16px_48px_rgba(27,37,55,0.25)]" onClick={(e) => e.stopPropagation()}>
         <div id="confirm-msg" className="text-[17px] font-semibold leading-snug">{q.message}</div>
         <div className="mt-5 flex justify-end gap-2">
-          <button onClick={() => answer(false)} className="h-10 px-4 rounded-md border border-line text-[15px] hover:border-ink-3">취소</button>
-          <button autoFocus onClick={() => answer(true)} className="h-10 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2">확인</button>
+          <button onClick={() => answer(false)} className="h-10 px-4 rounded-md border border-line text-[15px] hover:border-ink-3">{q.cancel ?? '취소'}</button>
+          <button autoFocus onClick={() => answer(true)} className="h-10 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2">{q.ok ?? '확인'}</button>
         </div>
       </div>
     </div>
@@ -81,8 +81,8 @@ function Confirm({ q, onDone }: { q: { message: string; resolve: (v: boolean) =>
 
 export function App(): React.ReactElement {
   const path = usePathname();
-  const [q, setQ] = useState<{ message: string; resolve: (v: boolean) => void } | null>(null);
-  useEffect(() => { setAsk((message) => new Promise<boolean>((resolve) => setQ({ message, resolve }))); }, []);
+  const [q, setQ] = useState<{ message: string; ok?: string; cancel?: string; resolve: (v: boolean) => void } | null>(null);
+  useEffect(() => { setAsk((message, o) => new Promise<boolean>((resolve) => setQ({ message, ok: o?.ok, cancel: o?.cancel, resolve }))); }, []);
   const requests = useMemo(() => (path === '/requests' ? allRequests() : []), [path]);
   const ppl = useMemo(() => (path === '/people' ? people(getDb(), false) : []), [path]);
   let page: React.ReactElement;
