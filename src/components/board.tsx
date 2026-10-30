@@ -1,9 +1,11 @@
 'use client';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ATTENDANCE_KINDS, OPTIONAL_KINDS, VACATING_KINDS, isVacantPost, needFor, type AttendanceKind, type Board as BoardT, type RequestRow, type SendResult } from '@/lib/repo';
+import type { Board as BoardT, RequestRow, SendResult } from '@/lib/repo';
+import { ATTENDANCE_KINDS, OPTIONAL_KINDS, VACATING_KINDS, isVacantPost, needFor, CAN, type AttendanceKind } from '@/lib/rules';
 import { addDays, currentShiftSeoul, fmtKo, fmtShort, groupsOn, todaySeoul, type Shift } from '@/lib/shift';
 import { ask } from '@/lib/ask';
 import { groupColor, zoneColor } from '@/lib/colors';
+import { useSession } from '@/lib/use-session';
 
 const FACTORIES = [[1, '1공장'], [2, '2공장']] as const;
 type Popover = { kind: 'person'; postId: number; personId: number } | { kind: 'add'; postId: number } | { kind: 'vacancy'; postId: number } | { kind: 'line'; postId: number } | null;
@@ -86,6 +88,9 @@ export function Board(): React.ReactElement {
     return out;
   }, [board]);
   const twoStep = factory === 2; // 2공장은 결재 문서: 입안(반장) → 결정(팀장)
+  const session = useSession();
+  const role = session?.kind === 'admin' ? session.role : undefined;
+  const mayDecide = twoStep ? CAN.decide(role) : CAN.confirm(role); // 2공장 결정은 팀장만, 1공장 확정은 팀장·담당자
 
   async function autofill(): Promise<void> {
     const d = await act({ action: 'autofill' });
@@ -158,10 +163,12 @@ export function Board(): React.ReactElement {
           <a href={`/api/attendance/export?month=${date.slice(0, 7)}&factory=${factory}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">월 근태표</a>
           {!locked && <button onClick={autofill} disabled={busy} className="h-11 px-4 rounded-md border border-brand/30 bg-white text-[15px] font-semibold text-brand hover:border-brand hover:bg-brand-soft disabled:opacity-40">자동 채우기</button>}
           {locked
-            ? <button onClick={() => act({ action: 'unconfirm' })} disabled={busy} className="h-11 px-4 rounded-md border border-line bg-white text-[15px] font-medium hover:border-ink-3">{twoStep ? '결정 해제' : '확정 해제'}</button>
+            ? (mayDecide && <button onClick={() => act({ action: 'unconfirm' })} disabled={busy} className="h-11 px-4 rounded-md border border-line bg-white text-[15px] font-medium hover:border-ink-3">{twoStep ? '결정 해제' : '확정 해제'}</button>)
             : twoStep && board?.status === '초안'
             ? <button onClick={() => act({ action: 'propose' }).then((d) => d && setFlash('입안했습니다. 팀장 결정을 기다립니다.'))} disabled={busy || total === 0} className="h-11 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">입안</button>
-            : <button onClick={confirm} disabled={busy || total === 0} className="h-11 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">{twoStep ? '결정' : '확정'}</button>}
+            : mayDecide
+            ? <button onClick={confirm} disabled={busy || total === 0} className="h-11 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">{twoStep ? '결정' : '확정'}</button>
+            : <span className="h-11 px-4 inline-flex items-center rounded-md bg-chip text-[14px] text-ink-2">{twoStep ? '팀장이 결정합니다' : '팀장·담당자가 확정합니다'}</span>}
         </div>
       </div>
 

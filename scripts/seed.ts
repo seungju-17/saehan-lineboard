@@ -5,6 +5,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { ensureDefaultAccounts } from '../src/lib/repo';
 import { openDb } from '../src/lib/db';
 
 const ROOT = path.resolve(__dirname, '..');
@@ -109,3 +110,7 @@ const insP = db.prepare('INSERT INTO board_posts (board_id, post_id, product) VA
 for (const b of db.prepare('SELECT id FROM boards WHERE factory_id=2').all() as { id: number }[]) for (const [code, prod] of Object.entries(P_PRODUCTS)) insP.run(b.id, postId.get(`2|${code}`)!, prod);
 const stat = db.prepare('SELECT (SELECT COUNT(*) FROM people) p, (SELECT COUNT(*) FROM boards) b, (SELECT COUNT(*) FROM assignments) a, (SELECT MAX(date) FROM boards) d').get();
 console.log('seeded', DB_FILE, stat, 'temps', temps, 'roster new/upd', rosterNew, rosterUpd, 'cutoff', CUTOFF);
+
+// 체험용 전화번호와 기본 관리자 계정. 실제 번호는 직원 화면에서 넣는다.
+db.prepare("UPDATE people SET phone = '010-' || substr('0000' || (5000 + id), -4) || '-' || substr('0000' || ((id * 7919) % 9000 + 1000), -4) WHERE phone IS NULL OR phone=''").run();
+ensureDefaultAccounts(db);

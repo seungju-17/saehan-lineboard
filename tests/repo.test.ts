@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { openDb } from '../src/lib/db';
 import { addPerson, removePerson, cancelRequests, getSettings, setSettings, weekHoursFor, needFor, setNeed, setProduct, clearVacancy, ensureBoard, getBoard, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
 import { periodFor } from '../src/lib/attendance-xlsx';
+import { loginAccount, personByPhone, myWork, ensureToken } from '../src/lib/repo';
+import { parseSession, sessionCookie, meCookie, parseMe } from '../src/lib/auth';
+import { CAN } from '../src/lib/rules';
 
 function memDb() {
   const db = openDb(':memory:');
@@ -296,17 +299,57 @@ describe('요청 취소', () => {
     expect(after.requests.every((r) => r.status !== '발송')).toBe(true);
     expect(isVacantPost(after.posts.find((p) => p.code === 'S-3')!, 0)).toBe(true);
   });
-  it('한 명이 수락하면 나머지에게 마감 알림이 간다', () => {
+  it('한 명이 수락하면 나머지에게 날짜가 적힌 마감 알림이 간다', () => {
     const db = memDb();
-    db.prepare("INSERT INTO people (id, name, grp, work_type, unit, home_factory_id) VALUES (4,'이은희','C','교대','협력사 C조',2)").run();
-    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (1,36,2,'이력'),(1,36,4,'이력')").run();
+    // 10-21 주간은 B조 휴무. B조 둘에게 S-3 경험을 심는다.
+    db.prepare("INSERT INTO people (id, name, grp, work_type, unit, home_factory_id) VALUES (5,'정미영','B','교대','협력사 B조',2)").run();
+    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (3,'2026-10-14','주간',2,'확정')").run();
+    db.prepare("INSERT INTO board_posts (board_id, post_id, product) VALUES (3,36,'신광야950')").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (3,36,2,'이력'),(3,36,5,'이력')").run();
     const b = getBoard('2026-10-21', '주간', 2, db);
     const s3 = b.posts.find((p) => p.code === 'S-3')!;
-    const r = sendRequests(b.id, s3.id, 1, db);
-    if (r.sent < 2) return; // 후보가 둘 미만이면 검증할 것이 없다
+    expect(sendRequests(b.id, s3.id, 1, db).sent).toBe(2);
     const reqs = getBoard('2026-10-21', '주간', 2, db).requests.filter((x) => x.status === '발송');
     expect(respond(reqs[0].token, 'accept', db).ok).toBe(true);
     const other = db.prepare("SELECT body FROM messages WHERE person_id=? ORDER BY id DESC LIMIT 1").get(reqs[1].person_id) as { body: string };
-    expect(other.body).toContain('먼저 수락');
+    expect(other.body).toContain('먼저 수락'); expect(other.body).toContain('10/21 주간 S-3호');
+    const after = getBoard('2026-10-21', '주간', 2, db);
+    expect(after.assignments.some((a) => a.person_id === reqs[0].person_id && a.source === '대체')).toBe(true);
+  });
+});
+
+describe('계정과 근무자 로그인', () => {
+  it('기본 계정 넷이 생기고, 역할마다 할 수 있는 일이 다르다', () => {
+    const db = memDb();
+    expect(loginAccount('teamlead', 'saehan', db)?.role).toBe('팀장');
+    expect(loginAccount('lead2', 'saehan', db)?.factory_id).toBe(2);
+    expect(loginAccount('staff', 'wrong', db)).toBeNull();
+    expect(CAN.decide('팀장')).toBe(true); expect(CAN.decide('담당자')).toBe(false);
+    expect(CAN.confirm('담당자')).toBe(true); expect(CAN.manage('반장')).toBe(false);
+  });
+  it('세션 쿠키는 서명을 검사하고, 근무자 쿠키는 토큰을 돌려준다', () => {
+    const s = { id: 1, name: '팀장', role: '팀장' as const, factory_id: null };
+    const c = sessionCookie(s);
+    expect(parseSession(c)).toEqual(s);
+    expect(parseSession(c.slice(0, -2) + 'zz')).toBeNull();
+    expect(parseMe(meCookie('abc'))).toBe('abc');
+    expect(parseMe('abc.bad')).toBeNull();
+  });
+  it('전화번호로 근무자를 찾고, 내 근무 화면에 요청·근태·이번 주 시간이 있다', () => {
+    const db = memDb();
+    db.prepare("UPDATE people SET phone='010-1234-5678' WHERE id=2").run();
+    expect(personByPhone('01012345678', db)?.name).toBe('김순자');
+    expect(personByPhone('010-9999-0000', db)).toBeNull();
+    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (3,'2026-10-14','주간',2,'확정')").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (3,36,2,'이력')").run();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    sendRequests(b.id, s3.id, 1, db);
+    const d = myWork(ensureToken(2, db), db)!;
+    expect(d.openRequests.length).toBe(1);
+    expect(d.openRequests[0].post).toBe('S-3호');
+    expect(d.messages[0].channel).toBe('앱·문자');
+    expect(d.week.max).toBe(52);
+    expect(Array.isArray(d.attendance)).toBe(true);
   });
 });

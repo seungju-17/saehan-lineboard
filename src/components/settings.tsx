@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import type { Settings } from '@/lib/repo';
+import type { Settings } from '@/lib/rules';
 
 const FIELDS: { key: keyof Settings; label: string; unit: string; help: string; min: number; max: number }[] = [
   { key: 'expiry_minutes', label: '대체 요청 만료', unit: '분', help: '이 시간 안에 답이 없으면 요청이 만료되고 「다음 후보에게」를 누를 수 있습니다.', min: 5, max: 240 },

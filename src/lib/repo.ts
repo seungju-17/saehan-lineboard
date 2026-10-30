@@ -1,15 +1,16 @@
 import crypto from 'node:crypto';
 import { getDb, type DB } from './db';
-import { addDays, sameGroupBefore, weekRange, type Shift } from './shift';
-import { aggregateExperience, typicalHeadcount, assignmentMessage, availability, rankCandidates, requestMessage, type Person } from './engine';
+import { addDays, groupsOn, sameGroupBefore, weekRange, type Shift } from './shift';
+import { defaultPassword, hashPassword } from './auth';
+import { aggregateExperience, typicalHeadcount, assignmentMessage, rankCandidates, requestMessage, type Person } from './engine';
 
 export type Factory = { id: number; code: string; name: string };
 export type Post = { id: number; factory_id: number; code: string; name: string; kind: string; sort: number; zone: string; unmanned: number; fixed: number };
 export type PersonRow = Person & { affiliation: string | null; role: string | null; gender: string | null; phone: string | null; home_factory_id: number | null; unit: string };
 export type Assignment = { id: number; post_id: number; person_id: number; source: string; name: string; affiliation: string | null; grp: string; work_type: string; gender: string | null; home_factory_id: number | null; unit: string };
 export type AttendanceRow = { person_id: number; kind: string; note: string | null; name: string };
-export const ATTENDANCE_KINDS = ['결근', '연차', '병가', '반차', '지각', '조퇴', '교육'] as const;
-export type AttendanceKind = typeof ATTENDANCE_KINDS[number];
+import { DEFAULT_SETTINGS, SETTING_RANGE, VACATING_KINDS, OPTIONAL_KINDS, type AttendanceKind, type Settings, type Role } from './rules';
+export { ATTENDANCE_KINDS, DEFAULT_SETTINGS, VACATING_KINDS, OPTIONAL_KINDS, isVacantPost, needFor, CAN, type AttendanceKind, type Settings, type VacancyInput, type Role } from './rules';
 export type RequestRow = { id: number; board_id: number; post_id: number; person_id: number; vacated_person_id: number | null; rank: number; reason: string | null; status: string; token: string; channel: string; sent_at: string; expires_at: string | null; responded_at: string | null; name: string; affiliation: string | null; post_code: string; post_name: string; date: string; shift: Shift; factory_id: number; vacated_name: string | null; vacated_kind: string | null; product: string | null };
 export type Board = {
   id: number; date: string; shift: Shift; factory_id: number; status: '초안' | '입안' | '확정'; confirmed_at: string | null; copied_from: string | null; note: string | null;
@@ -106,10 +107,6 @@ function requestsFor(where: string, db: DB): RequestRow[] {
 }
 export function allRequests(db: DB = getDb()): RequestRow[] { expireDue(db); return requestsFor('1=1', db).slice(0, 400); }
 
-/** 설정값. 없으면 기본값(근로기준법 주 52시간, 12시간 교대, 요청 만료 20분) */
-export type Settings = { expiry_minutes: number; shift_hours: number; week_max_hours: number };
-export const DEFAULT_SETTINGS: Settings = { expiry_minutes: 20, shift_hours: 12, week_max_hours: 52 };
-const SETTING_RANGE: Record<keyof Settings, [number, number]> = { expiry_minutes: [5, 240], shift_hours: [4, 24], week_max_hours: [12, 84] };
 export function getSettings(db: DB = getDb()): Settings {
   const out = { ...DEFAULT_SETTINGS };
   for (const r of db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[]) {
@@ -164,16 +161,6 @@ function suggestionsFor(date: string, shift: Shift, factoryId: number, ps: Post[
   return out;
 }
 
-export type VacancyInput = { kind: string; unmanned: number; product: string | null; vacant: number; stopped: number; need?: number | null };
-/** 그 자리에 필요한 인원. 정해 둔 값이 있으면 그 값, 없으면 제품이 걸린 유인 라인은 1명, 그 밖에는 0. 무인·부동은 0. */
-export function needFor(p: VacancyInput, count: number): number {
-  if (Number(p.unmanned) === 1 || Number(p.stopped) === 1) return 0;
-  if (p.need !== null && p.need !== undefined) return Number(p.need);
-  if (Number(p.vacant) === 1) return count + 1;
-  return p.kind === 'machine' && p.product ? 1 : 0;
-}
-/** 빈 자리 판정: 있는 사람이 필요 인원보다 적을 때. 무인 라인·부동 라인은 비어 있어도 빈 자리가 아니다. */
-export function isVacantPost(p: VacancyInput, count: number): boolean { return count < needFor(p, count); }
 /** 필요 인원 바꾸기. null 이면 기본값으로 돌아간다. */
 export function setNeed(boardId: number, postId: number, need: number | null, db: DB = getDb()): void {
   if (need !== null && (!Number.isInteger(need) || need < 0 || need > 20)) throw new Error('필요 인원은 0~20 사이여야 합니다');
@@ -197,9 +184,6 @@ export function setNote(boardId: number, note: string | null, db: DB = getDb()):
   db.prepare('UPDATE boards SET note=? WHERE id=?').run(note && note.trim() ? note.trim() : null, boardId);
 }
 export type SendResult = { sent: number; candidates: { name: string; reasons: string[] }[] };
-/** 자리를 비우는 근태(자동으로 대체 요청), 담당자가 요청 여부를 고르는 근태(반차·조퇴·교육), 기록만 하는 근태(지각) */
-export const VACATING_KINDS: AttendanceKind[] = ['결근', '연차', '병가'];
-export const OPTIONAL_KINDS: AttendanceKind[] = ['반차', '조퇴', '교육'];
 /** 근태 표시. 결근·연차·병가는 자리를 비우고 대체 요청. 반차·조퇴·교육은 request=true 일 때만 비우고 요청, 아니면 기록만. 지각은 기록만. kind=null 이면 지움. */
 export function setAttendance(boardId: number, postId: number | null, personId: number, kind: AttendanceKind | null, note: string | null, db: DB = getDb(), request?: boolean): SendResult {
   const b = db.prepare('SELECT date, shift FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift };
@@ -308,8 +292,42 @@ export function expireDue(db: DB = getDb()): void {
 }
 
 /** 알림 발송. 지금은 DB에만 저장(데모). 알림톡·SMS 연동 시 이 함수만 바꾼다. */
+/** 알림. 앱 알림함에 쌓이고, 전화번호가 있으면 문자로도 간다(도입 때 문자 발송 연결). channel에 어디로 갔는지 남긴다. */
 export function sendMessage(personId: number, kind: '요청' | '배치' | '변경', body: string, link: string | null, db: DB = getDb()): void {
-  db.prepare('INSERT INTO messages (person_id, kind, body, link) VALUES (?,?,?,?)').run(personId, kind, body, link);
+  const p = db.prepare('SELECT phone FROM people WHERE id=?').get(personId) as { phone: string | null } | undefined;
+  db.prepare('INSERT INTO messages (person_id, kind, body, link, channel) VALUES (?,?,?,?,?)').run(personId, kind, body, link, p?.phone ? '앱·문자' : '앱');
+}
+
+/** 관리자 계정. 비어 있으면 기본 계정 넷(팀장·담당자·반장 1공장·반장 2공장)을 만든다. 비밀번호는 LINEBOARD_PASSWORD(기본 saehan). */
+export type Account = { id: number; username: string; name: string; role: Role; factory_id: number | null };
+export function ensureDefaultAccounts(db: DB = getDb()): void {
+  const n = (db.prepare('SELECT COUNT(*) c FROM accounts').get() as { c: number }).c;
+  if (n > 0) return;
+  const ins = db.prepare('INSERT INTO accounts (username, name, role, factory_id, password_hash) VALUES (?,?,?,?,?)');
+  const h = hashPassword(defaultPassword());
+  ins.run('teamlead', '팀장', '팀장', null, h);
+  ins.run('staff', '지원팀 담당자', '담당자', null, h);
+  ins.run('lead1', '1공장 반장', '반장', 1, h);
+  ins.run('lead2', '2공장 반장', '반장', 2, h);
+}
+export function loginAccount(username: string, password: string, db: DB = getDb()): Account | null {
+  ensureDefaultAccounts(db);
+  const r = db.prepare('SELECT id, username, name, role, factory_id, password_hash FROM accounts WHERE username=? AND active=1').get(username.trim()) as (Account & { password_hash: string }) | undefined;
+  if (!r || r.password_hash !== hashPassword(password)) return null;
+  const { password_hash: _h, ...a } = r; void _h;
+  return a;
+}
+export function listAccounts(db: DB = getDb()): Account[] { ensureDefaultAccounts(db); return db.prepare('SELECT id, username, name, role, factory_id FROM accounts WHERE active=1 ORDER BY id').all() as Account[]; }
+/** 근무자 찾기: 전화번호 숫자만 비교 */
+export function personByPhone(phone: string, db: DB = getDb()): { id: number; name: string; token: string } | null {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 8) return null;
+  const rows = db.prepare("SELECT id, name, phone FROM people WHERE active=1 AND phone IS NOT NULL AND phone<>''").all() as { id: number; name: string; phone: string }[];
+  const p = rows.find((r) => r.phone.replace(/\D/g, '') === digits);
+  return p ? { id: p.id, name: p.name, token: ensureToken(p.id, db) } : null;
+}
+export function personByToken(tok: string, db: DB = getDb()): { id: number; name: string } | null {
+  return (db.prepare('SELECT id, name FROM people WHERE token=?').get(tok) as { id: number; name: string } | undefined) ?? null;
 }
 export function respond(tok: string, action: 'accept' | 'decline', db: DB = getDb()): { ok: boolean; message: string } {
   const r = db.prepare('SELECT * FROM requests WHERE token=?').get(tok) as (RequestRow & { board_id: number }) | undefined;
@@ -320,13 +338,13 @@ export function respond(tok: string, action: 'accept' | 'decline', db: DB = getD
   const taken = db.prepare("SELECT 1 FROM requests WHERE board_id=? AND post_id=? AND status='수락'").get(r.board_id, r.post_id);
   if (taken) { db.prepare(`UPDATE requests SET status='만료', responded_at=${now} WHERE id=?`).run(r.id); return { ok: false, message: '다른 분이 먼저 수락했습니다' }; }
   db.prepare(`UPDATE requests SET status='수락', responded_at=${now} WHERE id=?`).run(r.id);
+  const b = db.prepare('SELECT date, shift, factory_id, status FROM boards WHERE id=?').get(r.board_id) as { date: string; shift: Shift; factory_id: number; status: string };
+  const post = db.prepare('SELECT name FROM posts WHERE id=?').get(r.post_id) as { name: string };
   const others = db.prepare("SELECT person_id FROM requests WHERE board_id=? AND post_id=? AND status='발송'").all(r.board_id, r.post_id) as { person_id: number }[];
   db.prepare(`UPDATE requests SET status='만료', responded_at=${now} WHERE board_id=? AND post_id=? AND status='발송'`).run(r.board_id, r.post_id);
-  for (const o of others) sendMessage(o.person_id, '요청', `[대체 요청 마감] ${+r.date.slice(5, 7)}/${+r.date.slice(8, 10)} ${r.shift} ${r.post_name} — 다른 분이 먼저 수락했습니다. 감사합니다.`, null, db);
+  for (const o of others) sendMessage(o.person_id, '요청', `[대체 요청 마감] ${+b.date.slice(5, 7)}/${+b.date.slice(8, 10)} ${b.shift} ${post.name} — 다른 분이 먼저 수락했습니다. 감사합니다.`, null, db);
   addPerson(r.board_id, r.post_id, r.person_id, '대체', db);
-  const b = db.prepare('SELECT date, shift, factory_id, status FROM boards WHERE id=?').get(r.board_id) as { date: string; shift: Shift; factory_id: number; status: string };
   if (b.status === '확정') {
-    const post = db.prepare('SELECT name FROM posts WHERE id=?').get(r.post_id) as { name: string };
     const product = (db.prepare('SELECT product FROM board_posts WHERE board_id=? AND post_id=?').get(r.board_id, r.post_id) as { product: string | null } | undefined)?.product ?? null;
     sendMessage(r.person_id, '배치', assignmentMessage({ date: b.date, shift: b.shift, factory: factoryName(b.factory_id, db), post: post.name, product }), `/me/${ensureToken(r.person_id, db)}`, db);
   }
@@ -401,10 +419,26 @@ export function myWork(tok: string, db: DB = getDb()) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
   const rows = db.prepare(`SELECT b.date, b.shift, b.status, b.factory_id, po.name AS post, bp.product FROM assignments a JOIN boards b ON b.id=a.board_id JOIN posts po ON po.id=a.post_id
     LEFT JOIN board_posts bp ON bp.board_id=a.board_id AND bp.post_id=a.post_id WHERE a.person_id=? AND b.date BETWEEN ? AND ? ORDER BY b.date, b.shift`).all(p.id, addDays(today, -1), addDays(today, 6)) as { date: string; shift: Shift; status: string; factory_id: number; post: string; product: string | null }[];
-  const messages = db.prepare('SELECT id, kind, body, link, sent_at, read_at FROM messages WHERE person_id=? ORDER BY sent_at DESC LIMIT 20').all(p.id) as { id: number; kind: string; body: string; link: string | null; sent_at: string; read_at: string | null }[];
+  const messages = db.prepare('SELECT id, kind, body, link, channel, sent_at, read_at FROM messages WHERE person_id=? ORDER BY sent_at DESC LIMIT 30').all(p.id) as { id: number; kind: string; body: string; link: string | null; channel: string; sent_at: string; read_at: string | null }[];
   const facs = new Map(factories(db).map((f) => [f.id, f.name]));
-  const avail = (['주간', '야간'] as Shift[]);
-  return { person: p, today, assignments: rows.map((r) => ({ ...r, factory: facs.get(r.factory_id) ?? '' })), messages, offToday: !availability({ ...p, active: 1 } as Person, today, avail[0]).ok ? null : null };
+  expireDue(db);
+  const open = db.prepare(`SELECT r.token, r.expires_at, b.date, b.shift, b.factory_id, po.name AS post, bp.product FROM requests r JOIN boards b ON b.id=r.board_id JOIN posts po ON po.id=r.post_id
+    LEFT JOIN board_posts bp ON bp.board_id=r.board_id AND bp.post_id=r.post_id WHERE r.person_id=? AND r.status='발송' ORDER BY r.sent_at DESC`).all(p.id) as { token: string; expires_at: string | null; date: string; shift: Shift; factory_id: number; post: string; product: string | null }[];
+  const st = getSettings(db);
+  const w = weekRange(today);
+  const weekShifts = (db.prepare('SELECT COUNT(DISTINCT b.date || b.shift) c FROM assignments a JOIN boards b ON b.id=a.board_id WHERE a.person_id=? AND b.date BETWEEN ? AND ?').get(p.id, w.from, w.to) as { c: number }).c;
+  const attendance = db.prepare('SELECT date, shift, kind, note FROM attendance WHERE person_id=? AND date>=? ORDER BY date DESC, shift').all(p.id, addDays(today, -31)) as { date: string; shift: Shift; kind: string; note: string | null }[];
+  const g = groupsOn(today);
+  const dayType = p.work_type === '교대' && ['A', 'B', 'C'].includes(p.grp) ? (p.grp === g.day ? '주간' : p.grp === g.night ? '야간' : '휴무') : p.work_type;
+  return {
+    person: { ...p, phone: (db.prepare('SELECT phone FROM people WHERE id=?').get(p.id) as { phone: string | null }).phone },
+    today, dayType,
+    assignments: rows.map((r) => ({ ...r, factory: facs.get(r.factory_id) ?? '' })),
+    messages,
+    openRequests: open.map((r) => ({ ...r, factory: facs.get(r.factory_id) ?? '' })),
+    week: { from: w.from, to: w.to, shifts: weekShifts, hours: weekShifts * st.shift_hours, max: st.week_max_hours },
+    attendance,
+  };
 }
 export function markRead(tok: string, messageId: number, db: DB = getDb()): boolean {
   const p = db.prepare('SELECT id FROM people WHERE token=?').get(tok) as { id: number } | undefined;

@@ -1,5 +1,5 @@
 import type { Board } from '@/lib/repo';
-import { isVacantPost, needFor } from '@/lib/repo';
+import { isVacantPost, needFor } from '@/lib/rules';
 import { fmtKo, SHIFT_HOURS } from '@/lib/shift';
 import { groupColor, zoneColor } from '@/lib/colors';
 

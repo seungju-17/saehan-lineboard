@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS attendance (
   UNIQUE (date, shift, person_id));
 CREATE INDEX IF NOT EXISTS idx_att_person ON attendance(person_id, date);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL CHECK (role IN ('팀장','담당자','반장')), factory_id INTEGER, password_hash TEXT NOT NULL, active INTEGER DEFAULT 1);
 `;
 
 export type DB = Database.Database;

@@ -1,6 +1,6 @@
 /* 브라우저 판: /api/* 호출을 서버 없이 repo 함수로 바로 연결한다. src/app/api/* 와 같은 동작. */
 import { getDb } from './db-shim';
-import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, myWork, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
+import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, myWork, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
 import { currentShiftSeoul, todaySeoul, type Shift } from '../src/lib/shift';
 import { getStats } from '../src/lib/stats';
 import { ask, makeClient, explainApiError, type ChatMessage } from '../src/lib/assistant';
@@ -65,14 +65,40 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
       getDb().prepare(`UPDATE people SET ${sets.map((k) => `${k}=?`).join(', ')} WHERE id=?`).run(...sets.map((k) => u2[k] ?? null), id);
       return json({ ok: true });
     }
-    if (path === '/api/login') return json({ ok: true });
+    if (path === '/api/login') {
+      if (method === 'DELETE') { try { localStorage.removeItem('lb_role'); localStorage.removeItem('lb_me'); } catch { /* 저장소 없음 */ } return json({ ok: true }); }
+      if (body.phone !== undefined) {
+        const p = personByPhone(String(body.phone));
+        if (!p) return json({ error: '등록된 전화번호가 아닙니다. 체험판은 직원 화면의 번호를 쓰세요.' }, 404);
+        if (body.code === undefined) return json({ ok: true, name: p.name, sent: true, demoCode: '1234' });
+        if (String(body.code).trim() !== '1234') return json({ error: '인증번호가 맞지 않습니다' }, 401);
+        try { localStorage.setItem('lb_me', p.token); localStorage.removeItem('lb_role'); } catch { /* 저장소 없음 */ }
+        return json({ ok: true, kind: 'worker', name: p.name });
+      }
+      // 체험판 관리자: 아이디만 맞으면 들어간다 (teamlead · staff · lead1 · lead2)
+      const a = listAccounts().find((x) => x.username === String(body.username ?? '').trim());
+      if (!a) return json({ error: '아이디는 teamlead · staff · lead1 · lead2 중 하나입니다' }, 401);
+      try { localStorage.setItem('lb_role', JSON.stringify({ kind: 'admin', id: a.id, name: a.name, role: a.role, factory_id: a.factory_id })); localStorage.removeItem('lb_me'); } catch { /* 저장소 없음 */ }
+      return json({ ok: true, kind: 'admin', name: a.name, role: a.role });
+    }
+    if (path === '/api/session') {
+      let role: string | null = null, me: string | null = null;
+      try { role = localStorage.getItem('lb_role'); me = localStorage.getItem('lb_me'); } catch { /* 저장소 없음 */ }
+      if (role) return json(JSON.parse(role));
+      const p = me ? personByToken(me) : null;
+      if (p) return json({ kind: 'worker', name: p.name });
+      // 체험판은 로그인 없이 담당자로 들어온 것으로 본다
+      return json({ kind: 'admin', id: 0, name: '지원팀 담당자', role: '담당자', factory_id: null });
+    }
     if (path === '/api/public/respond') {
       const r = respond(String(body.token ?? ''), body.action as 'accept' | 'decline');
       return json(r, r.ok ? 200 : 409);
     }
     if (path === '/api/public/me') {
-      if (method === 'GET') { const d = myWork(u.searchParams.get('token') ?? ''); return d ? json(d) : json({ error: '링크가 올바르지 않습니다' }, 404); }
-      return json({ ok: markRead(String(body.token ?? ''), Number(body.messageId)) });
+      let me = ''; try { me = localStorage.getItem('lb_me') ?? ''; } catch { /* 저장소 없음 */ }
+      const tok = (method === 'GET' ? u.searchParams.get('token') : (body.token as string | undefined)) || me;
+      if (method === 'GET') { const d = myWork(tok); return d ? json(d) : json({ error: '로그인이 필요합니다' }, 401); }
+      return json({ ok: markRead(tok, Number(body.messageId)) });
     }
     return json({ error: 'not found' }, 404);
   } catch (e) {
