@@ -88,6 +88,22 @@ describe('근태표 기간', () => {
   });
 });
 
+describe('후보 제외', () => {
+  it('오늘 연차인 사람은 다른 자리 후보로 추천되지 않는다', () => {
+    const db = memDb();
+    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (3,'2026-10-14','주간',2,'확정')").run();
+    db.prepare("INSERT INTO board_posts (board_id, post_id, product) VALUES (3,36,'신광야950')").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (3,36,2,'이력')").run();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    expect(sendRequests(b.id, s3.id, 1, db).candidates.map((c) => c.name)).toContain('김순자');
+    cancelRequests(b.id, s3.id, null, db);
+    db.prepare("DELETE FROM requests").run();
+    db.prepare("INSERT INTO attendance (date, shift, person_id, kind) VALUES ('2026-10-21','주간',2,'연차')").run();
+    expect(sendRequests(b.id, s3.id, 1, db).candidates.map((c) => c.name)).not.toContain('김순자');
+  });
+});
+
 describe('요청 취소', () => {
   it('한 명만 취소하면 나머지는 살아 있고, 전체 취소하면 자리는 비어 있음으로 남는다', () => {
     const db = memDb();

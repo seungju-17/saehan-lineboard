@@ -103,6 +103,8 @@ function rankContext(date: string, shift: Shift, factoryId: number, db: DB) {
   const hist = db.prepare(`SELECT a.person_id AS personId, a.post_id AS postId, bp.product FROM assignments a JOIN boards b ON b.id=a.board_id
     LEFT JOIN board_posts bp ON bp.board_id=a.board_id AND bp.post_id=a.post_id WHERE b.factory_id=? AND b.date>=? AND b.date<?`).all(factoryId, since, date) as { personId: number; postId: number; product: string | null }[];
   const today = new Set((db.prepare('SELECT a.person_id FROM assignments a JOIN boards b ON b.id=a.board_id WHERE b.date=?').all(date) as { person_id: number }[]).map((r) => r.person_id));
+  // 오늘 결근·연차·병가로 빠진 사람은 다른 자리 후보로도 올리지 않는다 (지각·조퇴 등 기록만 한 사람은 그대로 근무 중이라 위에서 이미 걸러진다)
+  for (const r of db.prepare("SELECT person_id FROM attendance WHERE date=? AND kind IN ('결근','연차','병가')").all(date) as { person_id: number }[]) today.add(r.person_id);
   const recent = new Map<number, number>();
   for (const r of db.prepare(`SELECT a.person_id FROM assignments a JOIN boards b ON b.id=a.board_id WHERE a.source='대체' AND b.date>=? AND b.date<?`).all(recentSince, date) as { person_id: number }[]) recent.set(r.person_id, (recent.get(r.person_id) ?? 0) + 1);
   return { people: people(db), experience: aggregateExperience(hist), assignedThatDay: today, recentSubs: recent };
