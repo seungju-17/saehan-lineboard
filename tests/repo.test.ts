@@ -62,6 +62,33 @@ describe('빈 자리 판정', () => {
     expect(p.need).toBe(3);
     expect(isVacantPost(p, 2)).toBe(true);
   });
+  it('마지막 한 명을 일부러 빼면 오늘 안 돌리는 라인(부동)이 되고, 결근이면 빈 자리로 남는다', () => {
+    const db = memDb();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    expect(removePerson(b.id, s3.id, 1, false, db).stopped).toBe(true);
+    let p = getBoard('2026-10-21', '주간', 2, db).posts.find((x) => x.code === 'S-3')!;
+    expect(p.stopped).toBe(1); expect(p.product).toBe('신광야950'); expect(isVacantPost(p, 0)).toBe(false);
+    const db2 = memDb();
+    const b2 = getBoard('2026-10-21', '주간', 2, db2);
+    const s32 = b2.posts.find((x) => x.code === 'S-3')!;
+    expect(removePerson(b2.id, s32.id, 1, true, db2).stopped).toBe(false);
+    p = getBoard('2026-10-21', '주간', 2, db2).posts.find((x) => x.code === 'S-3')!;
+    expect(p.stopped).toBe(0); expect(isVacantPost(p, 0)).toBe(true);
+  });
+  it('안 돌린 라인(사람 없음·부동)의 제품은 다음 표로 복사되지 않고, 무인 라인 제품은 복사된다', () => {
+    const db = memDb();
+    db.prepare("INSERT INTO board_posts (board_id, post_id, product, stopped) VALUES (1,44,NULL,0)").run();
+    db.prepare("INSERT INTO posts (id, factory_id, code, name, kind, sort, zone, unmanned, fixed) VALUES (37,2,'S-4','S-4호','machine',9,'성형',0,0)").run();
+    db.prepare("INSERT INTO board_posts (board_id, post_id, product) VALUES (1,37,'생수900')").run(); // S-4: 제품만, 사람 없음
+    db.prepare("UPDATE board_posts SET stopped=1 WHERE board_id=1 AND post_id=36").run(); // S-3 부동 (사람은 있음)
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const by = Object.fromEntries(b.posts.map((p) => [p.code, p]));
+    expect(by['P-1'].product).toBe('진로4.0'); // 무인
+    expect(by['S-4'].product).toBeNull(); // 사람 없던 라인
+    expect(by['S-3'].product).toBeNull(); // 부동이던 라인
+    expect(by['S-3'].stopped).toBe(0); // 부동 자체는 복사하지 않는다
+  });
   it('남은 인원으로 충분하면 결근을 기록만 할 수 있고, 자리는 비어 있지 않다', () => {
     const db = memDb();
     addPerson(1, 36, 2, '이력', db);

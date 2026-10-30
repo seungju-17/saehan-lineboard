@@ -65,7 +65,10 @@ export function ensureBoard(date: string, shift: Shift, factoryId: number, db: D
   const ins = db.prepare('INSERT INTO boards (date, shift, factory_id, copied_from) VALUES (?,?,?,?)').run(date, shift, factoryId, src?.date ?? null);
   const id = Number(ins.lastInsertRowid);
   if (src && latest) {
-    db.prepare('INSERT INTO board_posts (board_id, post_id, product, vacant, need) SELECT ?, post_id, product, 0, need FROM board_posts WHERE board_id=?').run(id, latest.id);
+    // 제품은 지난 표에서 실제로 돌린 라인(사람이 있었고 부동이 아닌)과 무인 라인만 가져온다. 안 돌린 라인은 엑셀처럼 빈 줄로 시작한다.
+    db.prepare(`INSERT INTO board_posts (board_id, post_id, product, vacant, need) SELECT ?, bp.post_id,
+      CASE WHEN COALESCE(bp.stopped,0)=0 AND (po.unmanned=1 OR EXISTS (SELECT 1 FROM assignments a WHERE a.board_id=bp.board_id AND a.post_id=bp.post_id)) THEN bp.product ELSE NULL END, 0, bp.need
+      FROM board_posts bp JOIN posts po ON po.id=bp.post_id WHERE bp.board_id=?`).run(id, latest.id);
     db.prepare(`INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source) SELECT ?, a.post_id, a.person_id, '복사' FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? AND p.work_type='교대'`).run(id, src.id);
     db.prepare(`INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source) SELECT ?, a.post_id, a.person_id, '복사' FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? AND p.work_type<>'교대'`).run(id, latest.id);
     // 필요 인원 = 복사돼 들어온 인원. 복사된 사람이 없는 자리는 지난 표의 필요 인원을 그대로 둔다.
@@ -237,12 +240,19 @@ export function addPerson(boardId: number, postId: number, personId: number, sou
 function ensureBp(boardId: number, postId: number, db: DB): void {
   db.prepare('INSERT INTO board_posts (board_id, post_id) VALUES (?,?) ON CONFLICT DO NOTHING').run(boardId, postId);
 }
-export function removePerson(boardId: number, postId: number, personId: number, absent: boolean, db: DB = getDb()): void {
+/** 사람 빼기. absent=false(일부러 뺌)이면 필요 인원을 남은 인원으로 낮추고, 유인 라인에서 마지막 한 명까지 빼면 오늘 안 돌리는 라인으로 보고 부동 처리한다. */
+export function removePerson(boardId: number, postId: number, personId: number, absent: boolean, db: DB = getDb()): { stopped: boolean } {
   db.prepare('DELETE FROM assignments WHERE board_id=? AND post_id=? AND person_id=?').run(boardId, postId, personId);
-  if (absent) ensureBp(boardId, postId, db);
-  // 일부러 뺀 것(결근이 아님)은 오늘은 그만큼만 필요하다는 뜻이므로 필요 인원을 남은 인원으로 낮춘다
-  else db.prepare('UPDATE board_posts SET need=CASE WHEN need IS NOT NULL AND need > ? THEN ? ELSE need END WHERE board_id=? AND post_id=?').run(countAt(boardId, postId, db), countAt(boardId, postId, db), boardId, postId);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action) VALUES (?,?,?,?)").run(boardId, postId, personId, absent ? '결근' : '빼기');
+  ensureBp(boardId, postId, db);
+  if (absent) return { stopped: false };
+  const left = countAt(boardId, postId, db);
+  db.prepare('UPDATE board_posts SET need=CASE WHEN need IS NOT NULL AND need > ? THEN ? ELSE need END WHERE board_id=? AND post_id=?').run(left, left, boardId, postId);
+  if (left === 0) {
+    const r = db.prepare('SELECT po.kind, po.unmanned, bp.product, bp.stopped FROM board_posts bp JOIN posts po ON po.id=bp.post_id WHERE bp.board_id=? AND bp.post_id=?').get(boardId, postId) as { kind: string; unmanned: number; product: string | null; stopped: number };
+    if (r.kind === 'machine' && !r.unmanned && r.product && !r.stopped) { setStopped(boardId, postId, true, db); return { stopped: true }; }
+  }
+  return { stopped: false };
 }
 export function clearVacancy(boardId: number, postId: number, db: DB = getDb()): void {
   ensureBp(boardId, postId, db);

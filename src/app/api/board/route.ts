@@ -47,7 +47,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         const id = body.personId ?? findOrCreatePerson(body.name ?? '', k.factory).id;
         addPerson(board.id, body.postId, id); break;
       }
-      case 'remove': removePerson(board.id, body.postId, body.personId, false); break;
+      case 'remove': extra = removePerson(board.id, body.postId, body.personId, false); break;
       case 'absent': removePerson(board.id, body.postId, body.personId, true); extra = sendRequests(board.id, body.postId, body.personId); break;
       case 'send': extra = sendRequests(board.id, body.postId, null); break;
       case 'next': extra = nextCandidates(board.id, body.postId); break;

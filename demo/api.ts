@@ -24,7 +24,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
       switch (body.action) {
         case 'product': setProduct(board.id, postId, (body.product as string | null) ?? null); break;
         case 'add': addPerson(board.id, postId, body.personId ? personId : findOrCreatePerson(String(body.name ?? ''), factory).id); break;
-        case 'remove': removePerson(board.id, postId, personId, false); break;
+        case 'remove': extra = removePerson(board.id, postId, personId, false); break;
         case 'absent': removePerson(board.id, postId, personId, true); extra = sendRequests(board.id, postId, personId); break;
         case 'send': extra = sendRequests(board.id, postId, null); break;
         case 'next': extra = nextCandidates(board.id, postId); break;

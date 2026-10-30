@@ -240,7 +240,7 @@ export function Board(): React.ReactElement {
                                 </div>
                                 <div className="border-t border-line-2">
                                   {att && <PopBtn muted onClick={() => { setPop(null); act({ action: 'attend', postId: null, personId: a.person_id, kind: null }); }}>근태 표시 지우기</PopBtn>}
-                                  <PopBtn onClick={() => { setPop(null); act({ action: 'remove', postId: p.id, personId: a.person_id }); }}>빼기 (다른 자리로)</PopBtn>
+                                  <PopBtn onClick={async () => { setPop(null); const d = await act({ action: 'remove', postId: p.id, personId: a.person_id }); if (d && (d as BoardT & { stopped?: boolean }).stopped) setFlash(`${p.code} 인원이 없어 오늘은 안 돌리는 라인(부동)으로 표시했습니다. 되돌리려면 라인 번호 → 부동 해제`); }}>빼기 (다른 자리로)</PopBtn>
                                 </div>
                               </Pop>
                             )}
