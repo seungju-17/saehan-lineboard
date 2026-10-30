@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { addPerson, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, nextCandidates, removePerson, sendRequests, setProduct, unconfirmBoard } from '@/lib/repo';
+import { addPerson, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, nextCandidates, removePerson, sendRequests, setProduct, unconfirmBoard, autoFill } from '@/lib/repo';
 import type { Shift } from '@/lib/shift';
 
 type Key = { date: string; shift: Shift; factory: number };
@@ -24,6 +24,7 @@ type Action =
   | { action: 'send'; postId: number }
   | { action: 'next'; postId: number }
   | { action: 'cancel'; postId: number }
+  | { action: 'autofill' }
   | { action: 'confirm' }
   | { action: 'unconfirm' };
 
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       case 'send': extra = sendRequests(board.id, body.postId, null); break;
       case 'next': extra = nextCandidates(board.id, body.postId); break;
       case 'cancel': clearVacancy(board.id, body.postId); break;
+      case 'autofill': extra = autoFill(board.id); break;
       case 'confirm': extra = confirmBoard(board.id); break;
       case 'unconfirm': unconfirmBoard(board.id); break;
       default: return NextResponse.json({ error: 'unknown action' }, { status: 400 });

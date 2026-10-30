@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS board_posts (
   product TEXT, vacant INTEGER DEFAULT 0, PRIMARY KEY (board_id, post_id));
 CREATE TABLE IF NOT EXISTS assignments (
   id INTEGER PRIMARY KEY, board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id),
-  person_id INTEGER NOT NULL REFERENCES people(id), source TEXT NOT NULL DEFAULT '수동' CHECK (source IN ('이력','복사','수동','대체')),
+  person_id INTEGER NOT NULL REFERENCES people(id), source TEXT NOT NULL DEFAULT '수동' CHECK (source IN ('이력','복사','수동','대체','자동')),
   UNIQUE (board_id, post_id, person_id));
 CREATE INDEX IF NOT EXISTS idx_assign_person ON assignments(person_id);
 CREATE INDEX IF NOT EXISTS idx_assign_board ON assignments(board_id);

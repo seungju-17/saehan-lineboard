@@ -59,3 +59,13 @@ export function assignmentMessage(a: { date: string; shift: Shift; factory: stri
 export function requestMessage(a: { date: string; shift: Shift; factory: string; post: string; product: string | null }): string {
   return `[대체 근무 요청] ${md(a.date)} ${a.shift} ${a.factory} ${a.post}${a.product ? ' ' + a.product : ''} — 가능하시면 수락을 눌러 주세요`;
 }
+
+/** 과거 표에서 그 라인·제품에 보통 몇 명이 섰는지. 최빈값, 같으면 큰 쪽. 1~4명으로 제한. */
+export function typicalHeadcount(counts: number[], fallback = 1): number {
+  if (counts.length === 0) return fallback;
+  const freq = new Map<number, number>();
+  for (const c of counts) freq.set(c, (freq.get(c) ?? 0) + 1);
+  let best = fallback, bestF = 0;
+  for (const [c, f] of freq) if (f > bestF || (f === bestF && c > best)) { best = c; bestF = f; }
+  return Math.min(4, Math.max(1, best));
+}

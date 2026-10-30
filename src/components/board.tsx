@@ -78,6 +78,12 @@ export function Board(): React.ReactElement {
     return out;
   }, [board]);
 
+  async function autofill(): Promise<void> {
+    const d = await act({ action: 'autofill' });
+    if (!d) return;
+    const r = (d as BoardT & { filled: number; lines: number; need: number });
+    setFlash(r.filled === 0 ? (r.need === 0 ? '채울 자리가 없습니다' : '넣을 수 있는 사람이 없습니다') : `${r.lines}개 라인에 ${r.filled}명을 넣었습니다. 확인 후 확정하세요.`);
+  }
   async function confirm(): Promise<void> {
     if (!window.confirm(`${total}명에게 알림을 보냅니다.`)) return;
     const d = await act({ action: 'confirm' });
@@ -117,6 +123,7 @@ export function Board(): React.ReactElement {
         <div className="ml-auto flex items-center gap-2">
           <a href={`/print?${q}`} target="_blank" className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">인쇄</a>
           <a href={`/api/board/export?${q}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">엑셀</a>
+          {!locked && <button onClick={autofill} disabled={busy} className="h-11 px-4 rounded-md border border-brand/30 bg-white text-[15px] font-semibold text-brand hover:border-brand hover:bg-brand-soft disabled:opacity-40">자동 채우기</button>}
           {locked
             ? <button onClick={() => act({ action: 'unconfirm' })} disabled={busy} className="h-11 px-4 rounded-md border border-line bg-white text-[15px] font-medium hover:border-ink-3">확정 해제</button>
             : <button onClick={confirm} disabled={busy || total === 0} className="h-11 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">확정</button>}
@@ -173,7 +180,7 @@ export function Board(): React.ReactElement {
                         {ppl.map((a) => (
                           <span key={a.id} className="relative">
                             <button data-chip="person" disabled={locked} onClick={() => setPop({ kind: 'person', postId: p.id, personId: a.person_id })}
-                              className={`h-8 px-3 rounded-md text-sm font-medium disabled:cursor-default ${a.source === '대체' ? 'bg-ok-bg text-ok hover:bg-ok/15' : 'bg-chip text-ink hover:bg-line'}`}>{a.name}</button>
+                              className={`h-8 px-3 rounded-md text-sm font-medium disabled:cursor-default ${a.source === '대체' ? 'bg-ok-bg text-ok hover:bg-ok/15' : a.source === '자동' ? 'bg-brand-soft text-brand hover:bg-brand/15' : 'bg-chip text-ink hover:bg-line'}`}>{a.name}</button>
                             {pop?.kind === 'person' && pop.postId === p.id && pop.personId === a.person_id && (
                               <Pop ref={popRef}>
                                 <div className="px-3 pt-2 pb-1.5 text-xs text-ink-3 border-b border-line-2">{[a.affiliation, a.work_type === '임시' ? '임시' : a.grp !== '미정' ? `${a.grp}조` : null].filter(Boolean).join(' · ') || '정보 없음'}</div>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { aggregateExperience, assignmentMessage, availability, rankCandidates, type Person } from '../src/lib/engine';
+import { aggregateExperience, assignmentMessage, availability, rankCandidates, typicalHeadcount, type Person } from '../src/lib/engine';
 import { dayTypeOf, groupsOn, sameGroupBefore } from '../src/lib/shift';
 
 const DATE = '2026-10-30';
@@ -49,5 +49,16 @@ describe('sameGroupBefore', () => {
   });
   it('맞는 날이 없으면 가장 최근 표', () => {
     expect(sameGroupBefore('2026-01-05', '주간', ['2026-01-04'])).toBe('2026-01-04');
+  });
+});
+
+describe('typicalHeadcount', () => {
+  it('최빈값을 고르고, 같으면 큰 쪽', () => {
+    expect(typicalHeadcount([1, 2, 2, 1, 2])).toBe(2);
+    expect(typicalHeadcount([1, 2])).toBe(2);
+  });
+  it('이력이 없으면 기본값, 1~4명으로 제한', () => {
+    expect(typicalHeadcount([])).toBe(1);
+    expect(typicalHeadcount([7, 7])).toBe(4);
   });
 });

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { getDb, type DB } from './db';
 import { addDays, sameGroupBefore, type Shift } from './shift';
-import { aggregateExperience, assignmentMessage, availability, rankCandidates, requestMessage, type Person } from './engine';
+import { aggregateExperience, typicalHeadcount, assignmentMessage, availability, rankCandidates, requestMessage, type Person } from './engine';
 
 export type Factory = { id: number; code: string; name: string };
 export type Post = { id: number; factory_id: number; code: string; name: string; kind: string; sort: number };
@@ -181,6 +181,33 @@ export function respond(tok: string, action: 'accept' | 'decline', db: DB = getD
     sendMessage(r.person_id, '배치', assignmentMessage({ date: b.date, shift: b.shift, factory: factoryName(b.factory_id, db), post: post.name, product }), `/me/${ensureToken(r.person_id, db)}`, db);
   }
   return { ok: true, message: '수락했습니다. 배치표에 들어갔습니다.' };
+}
+
+/** 자동 채우기: 제품이 적힌 라인마다 과거 표의 보통 인원만큼, 후보 순위대로 채운다. 이미 있는 사람은 그대로 둔다. */
+export function autoFill(boardId: number, db: DB = getDb()): { filled: number; lines: number; need: number } {
+  const b = db.prepare('SELECT date, shift, factory_id, status FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift; factory_id: number; status: string };
+  if (b.status === '확정') return { filled: 0, lines: 0, need: 0 };
+  const targets = db.prepare(`SELECT bp.post_id, bp.product FROM board_posts bp JOIN posts po ON po.id=bp.post_id
+    WHERE bp.board_id=? AND po.kind='machine' AND bp.product IS NOT NULL AND bp.product<>'' ORDER BY po.sort`).all(boardId) as { post_id: number; product: string }[];
+  const since = addDays(b.date, -365);
+  const histCounts = db.prepare(`SELECT a.post_id, bp.product, COUNT(*) c FROM assignments a JOIN boards bo ON bo.id=a.board_id
+    JOIN board_posts bp ON bp.board_id=a.board_id AND bp.post_id=a.post_id WHERE bo.factory_id=? AND bo.date>=? AND bo.date<? GROUP BY a.board_id, a.post_id`).all(b.factory_id, since, b.date) as { post_id: number; product: string | null; c: number }[];
+  const ctx = rankContext(b.date, b.shift, b.factory_id, db);
+  const taken = new Set<number>();
+  let filled = 0, lines = 0, need = 0;
+  for (const t of targets) {
+    const same = histCounts.filter((h) => h.post_id === t.post_id && h.product === t.product).map((h) => h.c);
+    const any = histCounts.filter((h) => h.post_id === t.post_id).map((h) => h.c);
+    const want = typicalHeadcount(same.length ? same : any, 1);
+    const have = (db.prepare('SELECT COUNT(*) c FROM assignments WHERE board_id=? AND post_id=?').get(boardId, t.post_id) as { c: number }).c;
+    if (have >= want) continue;
+    need += want - have;
+    const picks = rankCandidates({ date: b.date, shift: b.shift, postId: t.post_id, product: t.product, ...ctx, excludeIds: taken, limit: want - have });
+    if (picks.length) lines++;
+    for (const c of picks) { addPerson(boardId, t.post_id, c.personId, '자동', db); taken.add(c.personId); ctx.assignedThatDay.add(c.personId); filled++; }
+  }
+  if (filled) db.prepare("INSERT INTO logs (board_id, action, detail) VALUES (?, '자동채우기', ?)").run(boardId, `${lines}라인 ${filled}명`);
+  return { filled, lines, need };
 }
 
 export function confirmBoard(boardId: number, db: DB = getDb()): { notified: number } {
