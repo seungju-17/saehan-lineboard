@@ -1,6 +1,6 @@
 /** 현황 화면용 집계. 모두 배치표 이력에서 계산한다. 추정치 없음. */
 import { getDb, type DB } from './db';
-import { getBoard, posts } from './repo';
+import { getBoard, isVacantPost, posts } from './repo';
 import { addDays, fmtShort, sameGroupBefore, type Shift } from './shift';
 
 export type Kpi = { key: string; label: string; value: number; unit: string; delta: number | null; upIsGood: boolean | null; pct?: boolean; denom?: string; small?: boolean; note?: string };
@@ -19,7 +19,7 @@ type Snap = { workers: number; lines: number; vacant: number; waiting: number; t
 
 function snapshot(boardId: number, factoryId: number, db: DB): Snap {
   const ps = posts(factoryId, db);
-  const bp = new Map((db.prepare('SELECT post_id, product, vacant FROM board_posts WHERE board_id=?').all(boardId) as { post_id: number; product: string | null; vacant: number }[]).map((r) => [r.post_id, r]));
+  const bp = new Map((db.prepare('SELECT post_id, product, vacant, stopped FROM board_posts WHERE board_id=?').all(boardId) as { post_id: number; product: string | null; vacant: number; stopped: number }[]).map((r) => [r.post_id, r]));
   const cnt = new Map<number, number>();
   let temps = 0, workers = 0;
   for (const r of db.prepare('SELECT a.post_id, p.work_type FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=?').all(boardId) as { post_id: number; work_type: string }[]) {
@@ -29,8 +29,8 @@ function snapshot(boardId: number, factoryId: number, db: DB): Snap {
   for (const p of ps) {
     const n = cnt.get(p.id) ?? 0, b = bp.get(p.id);
     const product = !!b?.product;
-    if (p.kind === 'machine' && (product || n > 0)) lines++;
-    if (Number(b?.vacant) === 1 || (n === 0 && p.kind === 'machine' && product)) vacant++;
+    if (p.kind === 'machine' && !p.unmanned && !Number(b?.stopped) && (product || n > 0)) lines++;
+    if (isVacantPost({ kind: p.kind, unmanned: p.unmanned, product: b?.product ?? null, vacant: b?.vacant ?? 0, stopped: b?.stopped ?? 0 }, n)) vacant++;
   }
   const waiting = (db.prepare("SELECT COUNT(*) c FROM requests WHERE board_id=? AND status='발송'").get(boardId) as { c: number }).c;
   return { workers, lines, vacant, waiting, temps };

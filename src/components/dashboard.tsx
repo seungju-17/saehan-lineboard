@@ -195,7 +195,6 @@ function Lines({ rows }: { rows: { date: string; day: number | null; night: numb
         {series.map((sr) => <path key={sr.key + 'gap'} d={gaps(sr.key)} fill="none" stroke={sr.color} strokeWidth="1.5" strokeDasharray="3 4" opacity="0.6" />)}
         {series.map((sr) => <path key={sr.key} d={path(sr.key)} fill="none" stroke={sr.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />)}
         {series.map((sr) => { const e = last(sr.key); return e && <g key={sr.key + 'end'}><circle cx={x(e.i)} cy={y(e.v)} r="4" fill={sr.color} stroke="#fff" strokeWidth="2" /><text x={x(e.i) - 8} y={y(e.v) - 8} textAnchor="end" fontSize="12" fontWeight="600" fill="#1c2230">{e.v}</text></g>; })}
-        {rows.map((r, i) => <title key={'t' + r.date}>{`${fmtShort(r.date)} 주간 ${r.day ?? '–'} · 야간 ${r.night ?? '–'}`}</title>)[0]}
       </svg>
       <div className="text-[12px] text-ink-3">{missing.length === 0 ? '14일 모두 표가 있습니다' : `표 없는 날 ${missing.length}일: ${missing.map((d) => fmtShort(d).split(' ')[0]).join(', ')} (점선 구간)`}</div>
       <ul className="sr-only">{rows.map((r) => <li key={r.date}>{fmtShort(r.date)} 주간 {r.day ?? '없음'} 야간 {r.night ?? '없음'}</li>)}</ul>

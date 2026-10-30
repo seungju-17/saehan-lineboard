@@ -5,6 +5,7 @@ import { Requests } from '../src/components/requests';
 import { People } from '../src/components/people';
 import { Dashboard } from '../src/components/dashboard';
 import { Assistant } from '../src/components/assistant';
+import { PrintBoard } from '../src/components/print-board';
 import { Respond } from '../src/app/(public)/r/[token]/respond';
 import { MyWork } from '../src/app/(public)/me/[token]/my-work';
 import { allRequests, ensureToken, factoryName, getBoard, people, requestByToken } from '../src/lib/repo';
@@ -58,34 +59,7 @@ function PrintView(): React.ReactElement {
   const date = printParams.get('date') ?? '', shift = (printParams.get('shift') ?? '주간') as Shift, factory = Number(printParams.get('factory') ?? 2);
   if (!date) return <p className="text-ink-2">표 화면에서 「인쇄」를 누르면 여기로 옵니다.</p>;
   const b = getBoard(date, shift, factory);
-  const byPost = new Map<number, string[]>();
-  for (const a of b.assignments) byPost.set(a.post_id, [...(byPost.get(a.post_id) ?? []), a.name]);
-  return (
-    <div className="mx-auto max-w-3xl bg-white border border-line rounded-xl p-6">
-      <div className="flex items-end justify-between mb-4">
-        <div>
-          <div className="text-2xl font-bold">{factoryName(factory)} 배치표</div>
-          <div className="text-ink-2">{fmtKo(date)} · {shift} {SHIFT_HOURS[shift]}{b.status === '확정' && <span className="ml-2 text-ok font-semibold">확정</span>}</div>
-        </div>
-        <span className="text-xs text-ink-3">A4 한 장으로 인쇄되는 모양</span>
-      </div>
-      <table className="w-full text-[15px] border-t border-b border-ink">
-        <thead><tr className="text-left text-sm text-ink-2 border-b border-line"><th className="py-1.5 w-32 font-normal">라인</th><th className="py-1.5 w-44 font-normal">제품</th><th className="py-1.5 font-normal">근무자</th></tr></thead>
-        <tbody>
-          {b.posts.map((p) => {
-            const names = byPost.get(p.id) ?? [];
-            const vacant = names.length === 0 && (p.vacant === 1 || (p.kind === 'machine' && !!p.product));
-            return (
-              <tr key={p.id} className={`border-b border-line-2 ${vacant ? 'bg-vac-bg' : p.kind !== 'machine' ? 'bg-ground/60' : ''}`}>
-                <td className="py-1.5 font-bold">{p.code}</td><td className="py-1.5">{p.product ?? ''}</td>
-                <td className="py-1.5">{names.join(' · ')}{vacant && <span className="text-vac font-semibold">비어 있음</span>}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
+  return <PrintBoard b={b} factoryName={factoryName(factory)} action={<span className="text-xs text-ink-3">A4 한 장으로 인쇄되는 모양</span>} />;
 }
 
 function Confirm({ q, onDone }: { q: { message: string; resolve: (v: boolean) => void } | null; onDone: () => void }): React.ReactElement | null {

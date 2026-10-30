@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { PersonRow } from '@/lib/repo';
 
 const FAC: Record<number, string> = { 1: '1공장', 2: '2공장' };
+const UNITS = ['주전반', '교대반', '협력사 A조', '협력사 B조', '협력사 C조', 'PE 협력사', '지원', '임시'];
 const sel = 'h-8 -ml-1 px-1 rounded bg-transparent hover:bg-ground text-[15px]';
 
 export function People({ initial }: { initial: PersonRow[] }): React.ReactElement {
@@ -32,19 +33,21 @@ export function People({ initial }: { initial: PersonRow[] }): React.ReactElemen
       </div>
       <div className="bg-white border border-line rounded-xl overflow-hidden">
         <table className="w-full">
-          <thead><tr className="text-left text-xs text-ink-3 border-b border-line"><th className="pl-5 py-2.5 font-medium">이름</th><th className="py-2.5 font-medium">소속</th><th className="py-2.5 font-medium">조</th><th className="py-2.5 font-medium">근무</th><th className="py-2.5 font-medium">공장</th><th className="py-2.5 font-medium pr-5">전화</th></tr></thead>
+          <thead><tr className="text-left text-xs text-ink-3 border-b border-line"><th className="pl-5 py-2.5 font-medium">이름</th><th className="py-2.5 font-medium">집단</th><th className="py-2.5 font-medium">소속</th><th className="py-2.5 font-medium">조</th><th className="py-2.5 font-medium">근무</th><th className="py-2.5 font-medium">성별</th><th className="py-2.5 font-medium">공장</th><th className="py-2.5 font-medium pr-5">전화</th></tr></thead>
           <tbody>
             {list.map((p) => (
               <tr key={p.id} className="border-b border-line-2 last:border-0 hover:bg-ground/60">
                 <td className="pl-5 py-2 font-semibold text-[15px]">{p.name}</td>
+                <td className="py-2"><select aria-label={`${p.name} 집단`} value={p.unit} onChange={(e) => patch(p.id, { unit: e.target.value })} className={sel}>{UNITS.map((a) => <option key={a}>{a}</option>)}</select></td>
                 <td className="py-2"><select aria-label={`${p.name} 소속`} value={p.affiliation ?? ''} onChange={(e) => patch(p.id, { affiliation: e.target.value })} className={sel}>{['새한', '세영', '다연', '피너'].map((a) => <option key={a}>{a}</option>)}</select></td>
                 <td className="py-2"><select aria-label={`${p.name} 조`} value={p.grp} onChange={(e) => patch(p.id, { grp: e.target.value })} className={sel}>{['A', 'B', 'C', '주전', '미정'].map((a) => <option key={a}>{a}</option>)}</select></td>
                 <td className="py-2"><select aria-label={`${p.name} 근무 형태`} value={p.work_type} onChange={(e) => patch(p.id, { work_type: e.target.value as PersonRow['work_type'] })} className={sel}>{['교대', '주간고정', '임시'].map((a) => <option key={a}>{a}</option>)}</select></td>
+                <td className="py-2"><select aria-label={`${p.name} 성별`} value={p.gender ?? ''} onChange={(e) => patch(p.id, { gender: e.target.value || null })} className={sel}><option value="">—</option><option value="M">남</option><option value="F">여</option></select></td>
                 <td className="py-2"><select aria-label={`${p.name} 공장`} value={p.home_factory_id ?? ''} onChange={(e) => patch(p.id, { home_factory_id: Number(e.target.value) })} className={sel}><option value="">—</option>{Object.entries(FAC).map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select></td>
                 <td className="py-2 pr-5"><input type="tel" inputMode="tel" autoComplete="off" aria-label={`${p.name} 전화`} defaultValue={p.phone ?? ''} placeholder="010-0000-0000" onBlur={(e) => { if (e.target.value !== (p.phone ?? '')) patch(p.id, { phone: e.target.value }); }} className="h-8 px-2 w-36 border border-transparent hover:border-line focus:border-brand rounded-md text-sm" /></td>
               </tr>
             ))}
-            {list.length === 0 && <tr><td colSpan={6} className="py-12 text-center text-ink-3">검색 결과가 없습니다</td></tr>}
+            {list.length === 0 && <tr><td colSpan={8} className="py-12 text-center text-ink-3">검색 결과가 없습니다</td></tr>}
           </tbody>
         </table>
       </div>

@@ -16,16 +16,18 @@ export type AskResult = { text: string; trace: Trace[]; served?: string };
 
 const SCHEMA = `
 factories(id, code, name)                       공장. 1=1공장 PET, 2=2공장
-posts(id, factory_id, code, name, kind, sort)   라인(설비). kind: machine(생산 라인) | support | op | leader | etc. code 예: 'S-3','P-1','05','PE-2','기타','OP'
-people(id, name, affiliation, grp, work_type, role, phone, home_factory_id, active)
-                                                직원. grp: 'A','B','C','주전','미정'. work_type: '교대','주간고정','임시'. affiliation: 소속사(새한/세영/다연/피너)
-boards(id, date, shift, factory_id, status, confirmed_at, copied_from)
-                                                하루 한 근무의 배치표. date 'YYYY-MM-DD', shift '주간'|'야간', status '초안'|'확정'
-board_posts(board_id, post_id, product, vacant) 그날 그 라인의 제품명과 비어 있음(1) 여부
+posts(id, factory_id, code, name, kind, sort, zone, unmanned, fixed)
+                                                라인(설비). kind: machine|support|op|leader|etc. zone: 구역(PET/B/PE/프리폼/성형/지원/관리). unmanned=1 무인 라인(2공장 프리폼, 사람 없어도 정상). fixed=1 직책(OP·반장·설비관리·생산관리)
+people(id, name, affiliation, grp, work_type, role, gender, phone, home_factory_id, active, unit)
+                                                직원. grp: 'A','B','C','주전','미정'. work_type: '교대','주간고정','임시'. gender: 'M'|'F'. unit: 집단(주전반/교대반/협력사 A조·B조·C조/PE 협력사/임시). affiliation: 소속사(새한/세영/다연/피너)
+boards(id, date, shift, factory_id, status, confirmed_at, copied_from, note)
+                                                하루 한 근무의 배치표. date 'YYYY-MM-DD', shift '주간'|'야간', status '초안'|'입안'|'확정'. note=비고
+board_posts(board_id, post_id, product, vacant, stopped) 그날 그 라인의 제품명, 비어 있음(1), 부동(stopped=1, 라인 세움)
 assignments(id, board_id, post_id, person_id, source)
                                                 누가 어느 라인에 섰는가. source: 이력(과거 자료)|복사|수동|대체(결원 대체로 들어감)|자동(자동 채우기)
 requests(id, board_id, post_id, person_id, vacated_person_id, rank, reason, status, sent_at, responded_at)
                                                 대체 요청. status: 발송(대기)|수락|거절|만료|취소
+attendance(id, date, shift, person_id, kind, note)   근태. kind: 결근|연차|병가|반차|지각|조퇴|교육
 logs(id, board_id, post_id, person_id, action, detail, at)   변경 기록
 `.trim();
 

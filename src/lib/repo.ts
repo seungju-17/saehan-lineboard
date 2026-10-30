@@ -4,14 +4,18 @@ import { addDays, sameGroupBefore, type Shift } from './shift';
 import { aggregateExperience, typicalHeadcount, assignmentMessage, availability, rankCandidates, requestMessage, type Person } from './engine';
 
 export type Factory = { id: number; code: string; name: string };
-export type Post = { id: number; factory_id: number; code: string; name: string; kind: string; sort: number };
-export type PersonRow = Person & { affiliation: string | null; role: string | null; gender: string | null; phone: string | null; home_factory_id: number | null };
-export type Assignment = { id: number; post_id: number; person_id: number; source: string; name: string; affiliation: string | null; grp: string; work_type: string; gender: string | null };
+export type Post = { id: number; factory_id: number; code: string; name: string; kind: string; sort: number; zone: string; unmanned: number; fixed: number };
+export type PersonRow = Person & { affiliation: string | null; role: string | null; gender: string | null; phone: string | null; home_factory_id: number | null; unit: string };
+export type Assignment = { id: number; post_id: number; person_id: number; source: string; name: string; affiliation: string | null; grp: string; work_type: string; gender: string | null; home_factory_id: number | null; unit: string };
+export type AttendanceRow = { person_id: number; kind: string; note: string | null; name: string };
+export const ATTENDANCE_KINDS = ['결근', '연차', '병가', '반차', '지각', '조퇴', '교육'] as const;
+export type AttendanceKind = typeof ATTENDANCE_KINDS[number];
 export type RequestRow = { id: number; board_id: number; post_id: number; person_id: number; vacated_person_id: number | null; rank: number; reason: string | null; status: string; token: string; channel: string; sent_at: string; expires_at: string | null; responded_at: string | null; name: string; affiliation: string | null; post_code: string; post_name: string; date: string; shift: Shift; factory_id: number; vacated_name: string | null; product: string | null };
 export type Board = {
-  id: number; date: string; shift: Shift; factory_id: number; status: '초안' | '확정'; confirmed_at: string | null; copied_from: string | null;
-  posts: (Post & { product: string | null; vacant: number })[];
+  id: number; date: string; shift: Shift; factory_id: number; status: '초안' | '입안' | '확정'; confirmed_at: string | null; copied_from: string | null; note: string | null;
+  posts: (Post & { product: string | null; vacant: number; stopped: number })[];
   assignments: Assignment[];
+  attendance: AttendanceRow[];
   requests: RequestRow[];
   suggestions: Record<number, { id: number; name: string; affiliation: string | null; hint: string }[]>;
 };
@@ -21,10 +25,10 @@ const token = (): string => crypto.randomBytes(12).toString('hex');
 export function factories(db: DB = getDb()): Factory[] { return db.prepare('SELECT id, code, name FROM factories ORDER BY sort').all() as Factory[]; }
 export function factoryName(id: number, db: DB = getDb()): string { return (db.prepare('SELECT name FROM factories WHERE id=?').get(id) as { name: string } | undefined)?.name ?? ''; }
 export function posts(factoryId: number, db: DB = getDb()): Post[] {
-  return db.prepare('SELECT id, factory_id, code, name, kind, sort FROM posts WHERE factory_id=? AND active=1 ORDER BY sort').all(factoryId) as Post[];
+  return db.prepare('SELECT id, factory_id, code, name, kind, sort, zone, unmanned, fixed FROM posts WHERE factory_id=? AND active=1 ORDER BY sort').all(factoryId) as Post[];
 }
 export function people(db: DB = getDb(), activeOnly = true): PersonRow[] {
-  return db.prepare(`SELECT id, name, affiliation, grp, work_type, role, gender, phone, home_factory_id, active FROM people ${activeOnly ? 'WHERE active=1' : ''} ORDER BY name`).all() as PersonRow[];
+  return db.prepare(`SELECT id, name, affiliation, grp, work_type, role, gender, phone, home_factory_id, active, unit FROM people ${activeOnly ? 'WHERE active=1' : ''} ORDER BY name`).all() as PersonRow[];
 }
 export function findOrCreatePerson(name: string, factoryId: number | null, db: DB = getDb()): { id: number; created: boolean } {
   const clean = name.replace(/\s+/g, '');
@@ -39,8 +43,10 @@ export function ensureToken(personId: number, db: DB = getDb()): string {
   const t = token(); db.prepare('UPDATE people SET token=? WHERE id=?').run(t, personId); return t;
 }
 
-function boardRow(date: string, shift: Shift, factoryId: number, db: DB): { id: number; status: '초안' | '확정'; confirmed_at: string | null; copied_from: string | null } | undefined {
-  return db.prepare('SELECT id, status, confirmed_at, copied_from FROM boards WHERE date=? AND shift=? AND factory_id=?').get(date, shift, factoryId) as never;
+export function isWeekend(date: string): boolean { const d = new Date(date + 'T00:00:00Z').getUTCDay(); return d === 0 || d === 6; }
+
+function boardRow(date: string, shift: Shift, factoryId: number, db: DB): { id: number; status: '초안' | '입안' | '확정'; confirmed_at: string | null; copied_from: string | null; note: string | null } | undefined {
+  return db.prepare('SELECT id, status, confirmed_at, copied_from, note FROM boards WHERE date=? AND shift=? AND factory_id=?').get(date, shift, factoryId) as never;
 }
 
 /** 보드가 없으면 직전 보드를 복사해 만든다 (버튼 없음). */
@@ -48,7 +54,11 @@ export function ensureBoard(date: string, shift: Shift, factoryId: number, db: D
   const ex = boardRow(date, shift, factoryId, db);
   if (ex) return ex.id;
   // 최근 표 중 "같은 조가 같은 근무를 한 날"의 표에서 교대 인원을, 가장 최근 표에서 제품·주간고정·임시 인원을 가져온다.
-  const recent = db.prepare('SELECT id, date FROM boards WHERE shift=? AND factory_id=? AND date<? ORDER BY date DESC LIMIT 14').all(shift, factoryId, date) as { id: number; date: string }[];
+  const all = db.prepare('SELECT id, date FROM boards WHERE shift=? AND factory_id=? AND date<? ORDER BY date DESC LIMIT 60').all(shift, factoryId, date) as { id: number; date: string }[];
+  // 휴일(토·일)은 최소 인원으로 돌아가므로 지난 휴일 표를 기준으로 삼는다.
+  const wk = isWeekend(date);
+  const pool = wk ? all.filter((r) => isWeekend(r.date)) : all.filter((r) => !isWeekend(r.date));
+  const recent = (pool.length ? pool : all).slice(0, 14);
   const latest = recent[0];
   const srcDate = sameGroupBefore(date, shift, recent.map((r) => r.date));
   const src = recent.find((r) => r.date === srcDate) ?? latest;
@@ -68,14 +78,15 @@ export function getBoard(date: string, shift: Shift, factoryId: number, db: DB =
   expireDue(db);
   const b = boardRow(date, shift, factoryId, db)!;
   const ps = posts(factoryId, db);
-  const bp = new Map((db.prepare('SELECT post_id, product, vacant FROM board_posts WHERE board_id=?').all(id) as { post_id: number; product: string | null; vacant: number }[]).map((r) => [r.post_id, r]));
-  const assignments = db.prepare(`SELECT a.id, a.post_id, a.person_id, a.source, p.name, p.affiliation, p.grp, p.work_type, p.gender
+  const bp = new Map((db.prepare('SELECT post_id, product, vacant, stopped FROM board_posts WHERE board_id=?').all(id) as { post_id: number; product: string | null; vacant: number; stopped: number }[]).map((r) => [r.post_id, r]));
+  const assignments = db.prepare(`SELECT a.id, a.post_id, a.person_id, a.source, p.name, p.affiliation, p.grp, p.work_type, p.gender, p.home_factory_id, p.unit
     FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? ORDER BY a.id`).all(id) as Assignment[];
   const requests = requestsFor(`r.board_id=${id}`, db);
+  const attendance = db.prepare('SELECT t.person_id, t.kind, t.note, p.name FROM attendance t JOIN people p ON p.id=t.person_id WHERE t.date=? AND t.shift=? ORDER BY t.id').all(date, shift) as AttendanceRow[];
   return {
-    id, date, shift, factory_id: factoryId, status: b.status, confirmed_at: b.confirmed_at, copied_from: b.copied_from,
-    posts: ps.map((p) => ({ ...p, product: bp.get(p.id)?.product ?? null, vacant: bp.get(p.id)?.vacant ?? 0 })),
-    assignments, requests, suggestions: suggestionsFor(date, shift, factoryId, ps, assignments, db),
+    id, date, shift, factory_id: factoryId, status: b.status, confirmed_at: b.confirmed_at, copied_from: b.copied_from, note: b.note,
+    posts: ps.map((p) => ({ ...p, product: bp.get(p.id)?.product ?? null, vacant: bp.get(p.id)?.vacant ?? 0, stopped: bp.get(p.id)?.stopped ?? 0 })),
+    assignments, requests, attendance, suggestions: suggestionsFor(date, shift, factoryId, ps, assignments, db),
   };
 }
 
@@ -108,6 +119,39 @@ function suggestionsFor(date: string, shift: Shift, factoryId: number, ps: Post[
     out[p.id] = c.map((x) => ({ id: x.personId, name: x.name, affiliation: pmap.get(x.personId)?.affiliation ?? null, hint: x.reasons.slice(0, 2).join(' · ') }));
   }
   return out;
+}
+
+/** 빈 자리 판정. 무인 라인·부동 라인은 비어 있어도 빈 자리가 아니다. */
+export function isVacantPost(p: { kind: string; unmanned: number; product: string | null; vacant: number; stopped: number }, count: number): boolean {
+  if (Number(p.unmanned) === 1 || Number(p.stopped) === 1) return false;
+  return Number(p.vacant) === 1 || (count === 0 && p.kind === 'machine' && !!p.product);
+}
+/** 라인 부동(세움)/해제. 부동이면 빈 자리로 치지 않고 요청도 닫는다. */
+export function setStopped(boardId: number, postId: number, stopped: boolean, db: DB = getDb()): void {
+  ensureBp(boardId, postId, db);
+  db.prepare('UPDATE board_posts SET stopped=?, vacant=CASE WHEN ? THEN 0 ELSE vacant END WHERE board_id=? AND post_id=?').run(stopped ? 1 : 0, stopped ? 1 : 0, boardId, postId);
+  if (stopped) db.prepare("UPDATE requests SET status='취소', responded_at=datetime('now','localtime') WHERE board_id=? AND post_id=? AND status='발송'").run(boardId, postId);
+  db.prepare("INSERT INTO logs (board_id, post_id, action) VALUES (?,?,?)").run(boardId, postId, stopped ? '부동' : '부동해제');
+}
+export function setNote(boardId: number, note: string | null, db: DB = getDb()): void {
+  db.prepare('UPDATE boards SET note=? WHERE id=?').run(note && note.trim() ? note.trim() : null, boardId);
+}
+/** 근태 표시. 결근은 자리를 비우고 대체 요청, 연차·병가는 자리만 비움, 반차·지각·조퇴·교육은 기록만. kind=null 이면 지움. */
+export function setAttendance(boardId: number, postId: number | null, personId: number, kind: AttendanceKind | null, note: string | null, db: DB = getDb()): { sent: number } {
+  const b = db.prepare('SELECT date, shift FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift };
+  if (!kind) { db.prepare('DELETE FROM attendance WHERE date=? AND shift=? AND person_id=?').run(b.date, b.shift, personId); return { sent: 0 }; }
+  db.prepare('INSERT INTO attendance (date, shift, person_id, kind, note) VALUES (?,?,?,?,?) ON CONFLICT(date, shift, person_id) DO UPDATE SET kind=excluded.kind, note=excluded.note').run(b.date, b.shift, personId, kind, note);
+  db.prepare("INSERT INTO logs (board_id, post_id, person_id, action, detail) VALUES (?,?,?,'근태',?)").run(boardId, postId, personId, kind);
+  if (postId && (kind === '결근' || kind === '연차' || kind === '병가')) {
+    removePerson(boardId, postId, personId, true, db);
+    if (kind === '결근') return sendRequests(boardId, postId, personId, db);
+  }
+  return { sent: 0 };
+}
+/** 2공장 결재: 입안(반장) → 결정(팀장=확정). */
+export function proposeBoard(boardId: number, db: DB = getDb()): void {
+  db.prepare("UPDATE boards SET status='입안' WHERE id=? AND status='초안'").run(boardId);
+  db.prepare("INSERT INTO logs (board_id, action) VALUES (?, '입안')").run(boardId);
 }
 
 export function setProduct(boardId: number, postId: number, product: string | null, db: DB = getDb()): void {
@@ -192,7 +236,7 @@ export function autoFill(boardId: number, db: DB = getDb()): { filled: number; l
   const b = db.prepare('SELECT date, shift, factory_id, status FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift; factory_id: number; status: string };
   if (b.status === '확정') return { filled: 0, lines: 0, need: 0 };
   const targets = db.prepare(`SELECT bp.post_id, bp.product FROM board_posts bp JOIN posts po ON po.id=bp.post_id
-    WHERE bp.board_id=? AND po.kind='machine' AND bp.product IS NOT NULL AND bp.product<>'' ORDER BY po.sort`).all(boardId) as { post_id: number; product: string }[];
+    WHERE bp.board_id=? AND po.kind='machine' AND po.unmanned=0 AND COALESCE(bp.stopped,0)=0 AND bp.product IS NOT NULL AND bp.product<>'' ORDER BY po.sort`).all(boardId) as { post_id: number; product: string }[];
   const since = addDays(b.date, -365);
   const histCounts = db.prepare(`SELECT a.post_id, bp.product, COUNT(*) c FROM assignments a JOIN boards bo ON bo.id=a.board_id
     JOIN board_posts bp ON bp.board_id=a.board_id AND bp.post_id=a.post_id WHERE bo.factory_id=? AND bo.date>=? AND bo.date<? GROUP BY a.board_id, a.post_id`).all(b.factory_id, since, b.date) as { post_id: number; product: string | null; c: number }[];

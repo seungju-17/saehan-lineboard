@@ -20,7 +20,7 @@ document.addEventListener('click', (e) => {
   const href = a.getAttribute('href') ?? '';
   if (!href.startsWith('/')) return;
   e.preventDefault();
-  if (href.startsWith('/api/board/export')) { toast('엑셀 저장은 설치판에서 동작합니다'); return; }
+  if (href.startsWith('/api/board/export') || href.startsWith('/api/attendance/export')) { toast('엑셀 저장은 설치판에서 동작합니다'); return; }
   if (href.startsWith('/print')) setPrintParams(new URLSearchParams(href.split('?')[1] ?? ''));
   navigate(href);
 });

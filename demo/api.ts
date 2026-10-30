@@ -1,6 +1,6 @@
 /* 브라우저 판: /api/* 호출을 서버 없이 repo 함수로 바로 연결한다. src/app/api/* 와 같은 동작. */
 import { getDb } from './db-shim';
-import { addPerson, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, myWork, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
+import { type AttendanceKind, addPerson, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, myWork, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
 import { currentShiftSeoul, todaySeoul, type Shift } from '../src/lib/shift';
 import { getStats } from '../src/lib/stats';
 import { ask, makeClient, explainApiError, type ChatMessage } from '../src/lib/assistant';
@@ -29,6 +29,10 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
         case 'send': extra = sendRequests(board.id, postId, null); break;
         case 'next': extra = nextCandidates(board.id, postId); break;
         case 'cancel': clearVacancy(board.id, postId); break;
+        case 'stop': setStopped(board.id, postId, !!body.stopped); break;
+        case 'note': setNote(board.id, (body.note as string | null) ?? null); break;
+        case 'attend': extra = setAttendance(board.id, body.postId ? postId : null, personId, (body.kind as AttendanceKind | null) ?? null, (body.note as string | null) ?? null); break;
+        case 'propose': proposeBoard(board.id); break;
         case 'autofill': extra = autoFill(board.id); break;
         case 'confirm': extra = confirmBoard(board.id); break;
         case 'unconfirm': unconfirmBoard(board.id); break;
@@ -52,7 +56,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
     if (path === '/api/people') {
       if (method === 'GET') return json(people(getDb(), false));
       const { id, ...u2 } = body as { id: number } & Record<string, unknown>;
-      const allowed = ['phone', 'grp', 'work_type', 'affiliation', 'active', 'home_factory_id'];
+      const allowed = ['phone', 'grp', 'work_type', 'affiliation', 'active', 'home_factory_id', 'unit', 'gender'];
       const sets = allowed.filter((k) => k in u2);
       if (!id || !sets.length) return json({ error: 'nothing to update' }, 400);
       getDb().prepare(`UPDATE people SET ${sets.map((k) => `${k}=?`).join(', ')} WHERE id=?`).run(...sets.map((k) => u2[k] ?? null), id);
