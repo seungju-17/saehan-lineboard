@@ -1,4 +1,4 @@
-import { factoryName, requestByToken } from '@/lib/repo';
+import { factoryName, getSettings, requestByToken } from '@/lib/repo';
 import { fmtKo, SHIFT_HOURS } from '@/lib/shift';
 import { Respond } from './respond';
 
@@ -19,7 +19,7 @@ export default async function RespondPage({ params }: { params: Promise<{ token:
         <dt className="text-ink-3">라인</dt><dd className="font-medium">{r.post_name}</dd>
         <dt className="text-ink-3">제품</dt><dd className="font-medium">{r.product ?? '—'}</dd>
       </dl>
-      {r.status === '발송' ? <Respond token={token} /> : <div className="text-lg font-semibold">{r.status === '수락' ? '수락했습니다.' : r.status === '거절' ? '거절로 처리되었습니다.' : '마감된 요청입니다.'}</div>}
+      {r.status === '발송' ? <Respond token={token} minutes={getSettings().expiry_minutes} /> : <div className="text-lg font-semibold">{r.status === '수락' ? '수락했습니다.' : r.status === '거절' ? '거절로 처리되었습니다.' : '마감된 요청입니다.'}</div>}
     </div>
   );
 }

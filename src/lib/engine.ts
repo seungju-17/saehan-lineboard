@@ -18,6 +18,8 @@ export function availability(p: Person, date: string, shift: Shift): { ok: boole
 export function rankCandidates(i: {
   date: string; shift: Shift; postId: number; product: string | null; people: Person[]; experience: Experience[];
   assignedThatDay: Set<number>; excludeIds?: Set<number>; recentSubs: Map<number, number>; limit?: number; requireExperience?: boolean;
+  /** 이번 주 근무시간(교대 수 × 한 교대 시간). 있으면 이유에 표시하고, 한 교대를 더해 상한을 넘는 사람은 뺀다 */
+  weekHours?: Map<number, number>; shiftHours?: number; maxWeekHours?: number;
 }): Candidate[] {
   const byP = new Map<number, Experience[]>();
   for (const e of i.experience) { if (!byP.has(e.personId)) byP.set(e.personId, []); byP.get(e.personId)!.push(e); }
@@ -32,7 +34,10 @@ export function rankCandidates(i: {
     const fac = rows.reduce((s, r) => s + r.count, 0);
     if ((i.requireExperience ?? true) && fac === 0) continue;
     const recent = i.recentSubs.get(p.id) ?? 0;
+    const hours = i.weekHours?.get(p.id) ?? 0;
+    if (i.weekHours && i.maxWeekHours && hours + (i.shiftHours ?? 12) > i.maxWeekHours) continue;
     const reasons = [av.why];
+    if (i.weekHours) reasons.push(`이번 주 ${hours}시간`);
     if (post) reasons.push(`이 라인 ${post}회`);
     if (prod) reasons.push(`같은 제품 ${prod}회`);
     if (!post && fac) reasons.push(`이 공장 ${fac}회`);

@@ -27,6 +27,13 @@ describe('후보 순위', () => {
   const experience = [{ personId: 1, postId: 10, product: 'x', count: 12 }, { personId: 2, postId: 11, product: 'x', count: 20 }, { personId: 3, postId: 11, product: 'y', count: 30 }, { personId: 4, postId: 10, product: 'x', count: 50 }, { personId: 6, postId: 10, product: 'x', count: 50 }];
   const base = { date: DATE, shift: '주간' as const, postId: 10, product: 'x', people, experience, assignedThatDay: new Set([6]), recentSubs: new Map<number, number>() };
   it('자리 → 제품 → 공장 순', () => { expect(rankCandidates(base).map((c) => c.name)).toEqual(['자리', '제품', '공장']); });
+  it('이번 주 근무시간을 이유에 쓰고, 한 교대 더하면 상한을 넘는 사람은 뺀다', () => {
+    const weekHours = new Map([[1, 48], [2, 36], [3, 0]]);
+    const n = rankCandidates({ ...base, weekHours, shiftHours: 12, maxWeekHours: 52, limit: 10 });
+    expect(n.map((c) => c.name)).toEqual(['제품', '공장']);
+    expect(n[0].reasons).toContain('이번 주 36시간');
+    expect(n[1].reasons).toContain('이번 주 0시간');
+  });
   it('근무중·배치됨·무경험 제외', () => { const n = rankCandidates({ ...base, limit: 10 }).map((c) => c.name); expect(n).not.toContain('근무중'); expect(n).not.toContain('배치됨'); expect(n).not.toContain('무경험'); });
   it('최근 대체가 많으면 뒤로', () => { expect(rankCandidates({ ...base, recentSubs: new Map([[1, 5]]) })[0].name).toBe('제품'); });
 });

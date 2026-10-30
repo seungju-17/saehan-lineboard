@@ -1,6 +1,6 @@
 /* 브라우저 판: /api/* 호출을 서버 없이 repo 함수로 바로 연결한다. src/app/api/* 와 같은 동작. */
 import { getDb } from './db-shim';
-import { type AttendanceKind, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, myWork, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
+import { type AttendanceKind, type Settings, getSettings, setSettings, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, myWork, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
 import { currentShiftSeoul, todaySeoul, type Shift } from '../src/lib/shift';
 import { getStats } from '../src/lib/stats';
 import { ask, makeClient, explainApiError, type ChatMessage } from '../src/lib/assistant';
@@ -54,6 +54,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
       catch (e) { const x = explainApiError(e); if (x.badKey) { try { localStorage.removeItem('lb_api_key'); } catch { /* 저장소 없음 */ } } return json({ error: x.badKey ? 'no_key' : 'api', message: x.message }, x.badKey ? 503 : 502); }
     }
     if (path === '/api/requests') return json(allRequests());
+    if (path === '/api/settings') { if (method === 'GET') return json(getSettings()); try { return json(setSettings(body as Partial<Settings>)); } catch (e) { return json({ error: (e as Error).message }, 400); } }
     if (path === '/api/people') {
       if (method === 'GET') return json(people(getDb(), false));
       const { id, ...u2 } = body as { id: number } & Record<string, unknown>;

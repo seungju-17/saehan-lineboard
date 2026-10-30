@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS attendance (
   kind TEXT NOT NULL CHECK (kind IN ('결근','연차','반차','지각','조퇴','병가','교육')), note TEXT, at TEXT DEFAULT (datetime('now','localtime')),
   UNIQUE (date, shift, person_id));
 CREATE INDEX IF NOT EXISTS idx_att_person ON attendance(person_id, date);
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
 
 export type DB = Database.Database;

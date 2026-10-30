@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { openDb } from '../src/lib/db';
-import { addPerson, cancelRequests, ensureBoard, getBoard, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
+import { addPerson, cancelRequests, getSettings, setSettings, weekHoursFor, ensureBoard, getBoard, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
 import { periodFor } from '../src/lib/attendance-xlsx';
 
 function memDb() {
@@ -85,6 +85,32 @@ describe('근태표 기간', () => {
     expect(periodFor('2026-10', '교대반')).toEqual({ from: '2026-10-11', to: '2026-11-10' });
     expect(periodFor('2026-12', '주전반')).toEqual({ from: '2026-12-11', to: '2027-01-10' });
     expect(periodFor('2026-02', '협력사 A조')).toEqual({ from: '2026-02-01', to: '2026-02-28' });
+  });
+});
+
+describe('설정', () => {
+  it('기본값은 20분·12시간·52시간이고, 저장하면 요청 만료에 쓰인다', () => {
+    const db = memDb();
+    expect(getSettings(db)).toEqual({ expiry_minutes: 20, shift_hours: 12, week_max_hours: 52 });
+    expect(setSettings({ expiry_minutes: 45 }, db).expiry_minutes).toBe(45);
+    expect(() => setSettings({ week_max_hours: 3 }, db)).toThrow();
+    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (3,'2026-10-14','주간',2,'확정')").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (3,36,2,'이력')").run();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    sendRequests(b.id, s3.id, 1, db);
+    const r = db.prepare("SELECT expires_at, sent_at FROM requests LIMIT 1").get() as { expires_at: string; sent_at: string } | undefined;
+    expect(r).toBeTruthy();
+    const diff = (Date.parse(r!.expires_at.replace(' ', 'T') + 'Z') - Date.now()) / 60000;
+    expect(diff).toBeGreaterThan(40); expect(diff).toBeLessThanOrEqual(45);
+  });
+  it('이번 주 근무시간은 월~일 배치된 교대 수 × 12시간', () => {
+    const db = memDb();
+    // 10-19(월)~10-25(일): 박현주 10-20 주간 1회 → 12시간, 최상진 1회
+    expect(weekHoursFor('2026-10-21', db).get(1)).toBe(12);
+    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (3,'2026-10-22','야간',2,'확정'),(4,'2026-10-18','주간',2,'확정')").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (3,36,1,'이력'),(4,36,1,'이력')").run();
+    expect(weekHoursFor('2026-10-21', db).get(1)).toBe(24); // 10-18은 지난주
   });
 });
 

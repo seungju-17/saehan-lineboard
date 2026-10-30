@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { getDb, type DB } from './db';
-import { addDays, sameGroupBefore, type Shift } from './shift';
+import { addDays, sameGroupBefore, weekRange, type Shift } from './shift';
 import { aggregateExperience, typicalHeadcount, assignmentMessage, availability, rankCandidates, requestMessage, type Person } from './engine';
 
 export type Factory = { id: number; code: string; name: string };
@@ -97,8 +97,38 @@ function requestsFor(where: string, db: DB): RequestRow[] {
 }
 export function allRequests(db: DB = getDb()): RequestRow[] { expireDue(db); return requestsFor('1=1', db).slice(0, 400); }
 
+/** 설정값. 없으면 기본값(근로기준법 주 52시간, 12시간 교대, 요청 만료 20분) */
+export type Settings = { expiry_minutes: number; shift_hours: number; week_max_hours: number };
+export const DEFAULT_SETTINGS: Settings = { expiry_minutes: 20, shift_hours: 12, week_max_hours: 52 };
+const SETTING_RANGE: Record<keyof Settings, [number, number]> = { expiry_minutes: [5, 240], shift_hours: [4, 24], week_max_hours: [12, 84] };
+export function getSettings(db: DB = getDb()): Settings {
+  const out = { ...DEFAULT_SETTINGS };
+  for (const r of db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[]) {
+    if (r.key in out) { const n = Number(r.value); if (Number.isFinite(n)) out[r.key as keyof Settings] = n; }
+  }
+  return out;
+}
+export function setSettings(patch: Partial<Settings>, db: DB = getDb()): Settings {
+  const up = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
+  for (const k of Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]) {
+    if (patch[k] === undefined) continue;
+    const n = Number(patch[k]); const [lo, hi] = SETTING_RANGE[k];
+    if (!Number.isInteger(n) || n < lo || n > hi) throw new Error(`${k}: ${lo}~${hi} 사이 정수여야 합니다`);
+    up.run(k, String(n));
+  }
+  return getSettings(db);
+}
+/** 이번 주(월~일) 사람별 근무시간. 배치된 교대 수 × 한 교대 시간. 공장 구분 없이 센다. */
+export function weekHoursFor(date: string, db: DB = getDb(), shiftHours = getSettings(db).shift_hours): Map<number, number> {
+  const w = weekRange(date);
+  const out = new Map<number, number>();
+  for (const r of db.prepare('SELECT a.person_id, COUNT(DISTINCT b.date || b.shift) c FROM assignments a JOIN boards b ON b.id=a.board_id WHERE b.date BETWEEN ? AND ? GROUP BY a.person_id').all(w.from, w.to) as { person_id: number; c: number }[]) out.set(r.person_id, r.c * shiftHours);
+  return out;
+}
+
 /** 후보 계산에 필요한 경험·가용 정보 */
 function rankContext(date: string, shift: Shift, factoryId: number, db: DB) {
+  const st = getSettings(db);
   const since = addDays(date, -180), recentSince = addDays(date, -30);
   const hist = db.prepare(`SELECT a.person_id AS personId, a.post_id AS postId, bp.product FROM assignments a JOIN boards b ON b.id=a.board_id
     LEFT JOIN board_posts bp ON bp.board_id=a.board_id AND bp.post_id=a.post_id WHERE b.factory_id=? AND b.date>=? AND b.date<?`).all(factoryId, since, date) as { personId: number; postId: number; product: string | null }[];
@@ -107,7 +137,7 @@ function rankContext(date: string, shift: Shift, factoryId: number, db: DB) {
   for (const r of db.prepare("SELECT person_id FROM attendance WHERE date=? AND kind IN ('결근','연차','병가')").all(date) as { person_id: number }[]) today.add(r.person_id);
   const recent = new Map<number, number>();
   for (const r of db.prepare(`SELECT a.person_id FROM assignments a JOIN boards b ON b.id=a.board_id WHERE a.source='대체' AND b.date>=? AND b.date<?`).all(recentSince, date) as { person_id: number }[]) recent.set(r.person_id, (recent.get(r.person_id) ?? 0) + 1);
-  return { people: people(db), experience: aggregateExperience(hist), assignedThatDay: today, recentSubs: recent };
+  return { people: people(db), experience: aggregateExperience(hist), assignedThatDay: today, recentSubs: recent, weekHours: weekHoursFor(date, db, st.shift_hours), shiftHours: st.shift_hours, maxWeekHours: st.week_max_hours };
 }
 
 /** 라인별 "+ 이름" 추천: 그 라인 경험자 중 오늘 투입 가능한 사람 */
@@ -117,7 +147,7 @@ function suggestionsFor(date: string, shift: Shift, factoryId: number, ps: Post[
   const out: Board['suggestions'] = {};
   const assignedHere = new Set(assignments.map((a) => a.person_id));
   for (const p of ps) {
-    const c = rankCandidates({ date, shift, postId: p.id, product: null, people: ctx.people, experience: ctx.experience, assignedThatDay: new Set([...ctx.assignedThatDay, ...assignedHere]), recentSubs: ctx.recentSubs, limit: 8 });
+    const c = rankCandidates({ date, shift, postId: p.id, product: null, people: ctx.people, experience: ctx.experience, assignedThatDay: new Set([...ctx.assignedThatDay, ...assignedHere]), recentSubs: ctx.recentSubs, weekHours: ctx.weekHours, shiftHours: ctx.shiftHours, maxWeekHours: ctx.maxWeekHours, limit: 8 });
     out[p.id] = c.map((x) => ({ id: x.personId, name: x.name, affiliation: pmap.get(x.personId)?.affiliation ?? null, hint: x.reasons.slice(0, 2).join(' · ') }));
   }
   return out;
@@ -199,7 +229,7 @@ export function sendRequests(boardId: number, postId: number, vacatedId: number 
   if (vacatedId) asked.add(vacatedId);
   const ctx = rankContext(b.date, b.shift, b.factory_id, db);
   const ranked = rankCandidates({ date: b.date, shift: b.shift, postId, product, ...ctx, excludeIds: asked, limit: 3 });
-  const expires = new Date(Date.now() + 20 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+  const expires = new Date(Date.now() + getSettings(db).expiry_minutes * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
   const fac = factoryName(b.factory_id, db);
   const ins = db.prepare('INSERT INTO requests (board_id, post_id, person_id, vacated_person_id, rank, reason, token, expires_at) VALUES (?,?,?,?,?,?,?,?)');
   const startRank = (db.prepare('SELECT COUNT(*) c FROM requests WHERE board_id=? AND post_id=?').get(boardId, postId) as { c: number }).c;

@@ -8,7 +8,8 @@ import { Assistant } from '../src/components/assistant';
 import { PrintBoard } from '../src/components/print-board';
 import { Respond } from '../src/app/(public)/r/[token]/respond';
 import { MyWork } from '../src/app/(public)/me/[token]/my-work';
-import { allRequests, ensureToken, factoryName, getBoard, people, requestByToken } from '../src/lib/repo';
+import { allRequests, ensureToken, factoryName, getBoard, getSettings, people, requestByToken } from '../src/lib/repo';
+import { SettingsForm } from '../src/components/settings';
 import { fmtKo, SHIFT_HOURS, type Shift } from '../src/lib/shift';
 import { setAsk } from '../src/lib/ask';
 import { getDb } from './db-shim';
@@ -49,7 +50,7 @@ function RespondPage({ token }: { token: string }): React.ReactElement {
         <dt className="text-ink-3">라인</dt><dd className="font-medium">{r.post_name}</dd>
         <dt className="text-ink-3">제품</dt><dd className="font-medium">{r.product ?? '—'}</dd>
       </dl>
-      {r.status === '발송' ? <Respond token={token} /> : <div className="text-lg font-semibold">{r.status === '수락' ? '수락했습니다.' : r.status === '거절' ? '거절로 처리되었습니다.' : '마감된 요청입니다.'}</div>}
+      {r.status === '발송' ? <Respond token={token} minutes={getSettings().expiry_minutes} /> : <div className="text-lg font-semibold">{r.status === '수락' ? '수락했습니다.' : r.status === '거절' ? '거절로 처리되었습니다.' : '마감된 요청입니다.'}</div>}
       <a href={`/me/${meTok}`} className="text-sm text-ink-2 underline underline-offset-2">{r.name}님의 근무 화면 보기</a>
     </div>
   );
@@ -89,6 +90,7 @@ export function App(): React.ReactElement {
   if (path.startsWith('/me/')) return <Public><MyWork token={path.slice(4)} /></Public>;
   if (path === '/requests') page = <Requests key="req" initial={requests} />;
   else if (path === '/people') page = <People key="ppl" initial={ppl} />;
+  else if (path === '/settings') page = <SettingsForm key="set" initial={getSettings()} />;
   else if (path === '/dashboard') page = <Dashboard />;
   else if (path === '/print') page = <PrintView />;
   else if (path === '/login') page = <div className="bg-white border border-line rounded-xl p-8 max-w-sm"><div className="text-lg font-semibold">이 판에는 로그인이 없습니다</div><p className="mt-1 text-sm text-ink-2">설치판은 비밀번호 하나로 들어갑니다.</p><button onClick={() => navigate('/today')} className="mt-4 h-10 px-4 rounded-md bg-brand text-white font-semibold">오늘 배치로</button></div>;

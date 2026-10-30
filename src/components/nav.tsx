@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
-const items = [['/today', '오늘 배치'], ['/dashboard', '현황'], ['/requests', '대체 요청'], ['/people', '직원']] as const;
+const items = [['/today', '오늘 배치'], ['/dashboard', '현황'], ['/requests', '대체 요청'], ['/people', '직원'], ['/settings', '설정']] as const;
 
 export function Nav(): React.ReactElement {
   const path = usePathname();

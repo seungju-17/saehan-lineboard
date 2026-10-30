@@ -27,6 +27,8 @@ export function sameGroupBefore(date: string, shift: Shift, dates: string[]): st
   const g = groupsOn(date)[key];
   return dates.find((d) => groupsOn(d)[key] === g) ?? dates[0];
 }
+/** 그 날짜가 속한 주의 월요일과 일요일 */
+export function weekRange(date: string): { from: string; to: string } { const dow = (new Date(utc(date)).getUTCDay() + 6) % 7; return { from: addDays(date, -dow), to: addDays(date, 6 - dow) }; }
 export function addDays(date: string, n: number): string { return new Date(utc(date) + n * 86_400_000).toISOString().slice(0, 10); }
 export function todaySeoul(): string { return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }); }
 export function currentShiftSeoul(): Shift {

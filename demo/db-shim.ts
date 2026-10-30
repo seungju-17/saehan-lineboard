@@ -4,7 +4,7 @@ type SqlDb = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type DB = any;
 let raw: SqlDb | null = null;
-export function setDb(d: SqlDb): void { raw = d; }
+export function setDb(d: SqlDb): void { raw = d; d.run('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)'); }
 export function rawDb(): SqlDb { return raw; }
 const norm = (p: unknown[]): unknown[] => p.map((v) => (v === undefined ? null : v));
 

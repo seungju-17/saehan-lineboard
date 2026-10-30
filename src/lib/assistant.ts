@@ -28,6 +28,7 @@ assignments(id, board_id, post_id, person_id, source)
 requests(id, board_id, post_id, person_id, vacated_person_id, rank, reason, status, sent_at, responded_at)
                                                 대체 요청. status: 발송(대기)|수락|거절|만료|취소
 attendance(id, date, shift, person_id, kind, note)   근태. kind: 결근|연차|병가|반차|지각|조퇴|교육
+settings(key, value)   설정. expiry_minutes(요청 만료 분), shift_hours(한 교대 시간), week_max_hours(주 최대 근무시간)
 logs(id, board_id, post_id, person_id, action, detail, at)   변경 기록
 `.trim();
 
