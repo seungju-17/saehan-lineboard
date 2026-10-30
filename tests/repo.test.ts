@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { openDb } from '../src/lib/db';
-import { addPerson, cancelRequests, getSettings, setSettings, weekHoursFor, needFor, setNeed, setProduct, clearVacancy, ensureBoard, getBoard, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
+import { addPerson, removePerson, cancelRequests, getSettings, setSettings, weekHoursFor, needFor, setNeed, setProduct, clearVacancy, ensureBoard, getBoard, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
 import { periodFor } from '../src/lib/attendance-xlsx';
 
 function memDb() {
@@ -42,6 +42,25 @@ describe('빈 자리 판정', () => {
     sendRequests(b.id, s3.id, null, db);
     setNeed(b.id, s3.id, 2, db);
     expect(getBoard('2026-10-21', '주간', 2, db).requests.every((r) => r.status !== '발송')).toBe(true);
+  });
+  it('일부러 빼면 필요 인원이 따라 내려가고, 더 넣으면 올라간다', () => {
+    const db = memDb();
+    addPerson(1, 36, 2, '이력', db); // 어제 S-3 2명
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    expect(s3.need).toBe(2);
+    removePerson(b.id, s3.id, 2, false, db); // 오늘은 1명이면 된다
+    let p = getBoard('2026-10-21', '주간', 2, db).posts.find((x) => x.code === 'S-3')!;
+    expect(p.need).toBe(1);
+    expect(isVacantPost(p, 1)).toBe(false);
+    addPerson(b.id, s3.id, 2, '수동', db); addPerson(b.id, s3.id, 3, '수동', db); // 오늘은 3명
+    p = getBoard('2026-10-21', '주간', 2, db).posts.find((x) => x.code === 'S-3')!;
+    expect(p.need).toBe(3);
+    // 결근은 필요 인원을 유지한다
+    setAttendance(b.id, s3.id, 3, '결근', null, db);
+    p = getBoard('2026-10-21', '주간', 2, db).posts.find((x) => x.code === 'S-3')!;
+    expect(p.need).toBe(3);
+    expect(isVacantPost(p, 2)).toBe(true);
   });
   it('남은 인원으로 충분하면 결근을 기록만 할 수 있고, 자리는 비어 있지 않다', () => {
     const db = memDb();

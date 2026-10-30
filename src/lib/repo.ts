@@ -229,7 +229,9 @@ export function setProduct(boardId: number, postId: number, product: string | nu
 export function addPerson(boardId: number, postId: number, personId: number, source = '수동', db: DB = getDb()): void {
   db.prepare('INSERT INTO board_posts (board_id, post_id) VALUES (?,?) ON CONFLICT DO NOTHING').run(boardId, postId);
   db.prepare('INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source) VALUES (?,?,?,?)').run(boardId, postId, personId, source);
-  db.prepare('UPDATE board_posts SET vacant=0 WHERE board_id=? AND post_id=?').run(boardId, postId);
+  // 필요 인원보다 많이 넣었으면 오늘은 그만큼 필요한 것으로 본다 (대체·자동 투입은 빈 자리를 채우는 것이라 제외)
+  if (source === '수동' || source === '복사') db.prepare('UPDATE board_posts SET vacant=0, need=CASE WHEN need IS NOT NULL AND need < ? THEN ? ELSE need END WHERE board_id=? AND post_id=?').run(countAt(boardId, postId, db), countAt(boardId, postId, db), boardId, postId);
+  else db.prepare('UPDATE board_posts SET vacant=0 WHERE board_id=? AND post_id=?').run(boardId, postId);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action) VALUES (?,?,?,'추가')").run(boardId, postId, personId);
 }
 function ensureBp(boardId: number, postId: number, db: DB): void {
@@ -238,6 +240,8 @@ function ensureBp(boardId: number, postId: number, db: DB): void {
 export function removePerson(boardId: number, postId: number, personId: number, absent: boolean, db: DB = getDb()): void {
   db.prepare('DELETE FROM assignments WHERE board_id=? AND post_id=? AND person_id=?').run(boardId, postId, personId);
   if (absent) ensureBp(boardId, postId, db);
+  // 일부러 뺀 것(결근이 아님)은 오늘은 그만큼만 필요하다는 뜻이므로 필요 인원을 남은 인원으로 낮춘다
+  else db.prepare('UPDATE board_posts SET need=CASE WHEN need IS NOT NULL AND need > ? THEN ? ELSE need END WHERE board_id=? AND post_id=?').run(countAt(boardId, postId, db), countAt(boardId, postId, db), boardId, postId);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action) VALUES (?,?,?,?)").run(boardId, postId, personId, absent ? '결근' : '빼기');
 }
 export function clearVacancy(boardId: number, postId: number, db: DB = getDb()): void {
