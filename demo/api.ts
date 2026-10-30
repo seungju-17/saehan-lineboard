@@ -1,7 +1,8 @@
 /* 브라우저 판: /api/* 호출을 서버 없이 repo 함수로 바로 연결한다. src/app/api/* 와 같은 동작. */
 import { getDb } from './db-shim';
 import { addPerson, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, myWork, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
-import type { Shift } from '../src/lib/shift';
+import { currentShiftSeoul, todaySeoul, type Shift } from '../src/lib/shift';
+import { getStats } from '../src/lib/stats';
 
 const json = (data: unknown, status = 200): Response => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -33,6 +34,11 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
         default: return json({ error: 'unknown action' }, 400);
       }
       return json({ ...getBoard(date, shift, factory), ...extra });
+    }
+    if (path === '/api/stats') {
+      const factory = Number(u.searchParams.get('factory') ?? 2), date = u.searchParams.get('date') ?? todaySeoul();
+      const shift = (u.searchParams.get('shift') as Shift | null) ?? currentShiftSeoul(), days = Math.min(90, Math.max(7, Number(u.searchParams.get('days') ?? 30)));
+      return json(getStats(date, shift, factory, days));
     }
     if (path === '/api/requests') return json(allRequests());
     if (path === '/api/people') {

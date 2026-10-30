@@ -3,6 +3,7 @@ import { Board } from '../src/components/board';
 import { Nav } from '../src/components/nav';
 import { Requests } from '../src/components/requests';
 import { People } from '../src/components/people';
+import { Dashboard } from '../src/components/dashboard';
 import { Respond } from '../src/app/(public)/r/[token]/respond';
 import { MyWork } from '../src/app/(public)/me/[token]/my-work';
 import { allRequests, ensureToken, factoryName, getBoard, people, requestByToken } from '../src/lib/repo';
@@ -113,6 +114,7 @@ export function App(): React.ReactElement {
   if (path.startsWith('/me/')) return <Public><MyWork token={path.slice(4)} /></Public>;
   if (path === '/requests') page = <Requests key="req" initial={requests} />;
   else if (path === '/people') page = <People key="ppl" initial={ppl} />;
+  else if (path === '/dashboard') page = <Dashboard />;
   else if (path === '/print') page = <PrintView />;
   else if (path === '/login') page = <div className="bg-white border border-line rounded-xl p-8 max-w-sm"><div className="text-lg font-semibold">이 판에는 로그인이 없습니다</div><p className="mt-1 text-sm text-ink-2">설치판은 비밀번호 하나로 들어갑니다.</p><button onClick={() => navigate('/today')} className="mt-4 h-10 px-4 rounded-md bg-brand text-white font-semibold">오늘 배치로</button></div>;
   else page = <Board />;

@@ -305,7 +305,7 @@ function Seg({ value, options, onChange }: { value: string; options: readonly (r
   return (
     <div className="inline-flex h-9 p-0.5 rounded-md bg-line-2" role="group">
       {options.map(([v, label]) => (
-        <button key={v} onClick={() => onChange(v)} className={`px-3.5 rounded text-sm transition-colors ${value === v ? 'bg-white text-ink font-semibold' : 'text-ink-2 hover:text-ink'}`}>{label}</button>
+        <button key={v} onClick={() => onChange(v)} className={`px-3.5 rounded text-sm whitespace-nowrap transition-colors ${value === v ? 'bg-white text-ink font-semibold' : 'text-ink-2 hover:text-ink'}`}>{label}</button>
       ))}
     </div>
   );
