@@ -1,7 +1,7 @@
 'use client';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Board as BoardT, RequestRow } from '@/lib/repo';
-import { addDays, currentShiftSeoul, fmtKo, todaySeoul, type Shift } from '@/lib/shift';
+import { addDays, currentShiftSeoul, fmtKo, fmtShort, groupsOn, todaySeoul, type Shift } from '@/lib/shift';
 import { ask } from '@/lib/ask';
 
 const FACTORIES = [[1, '1공장'], [2, '2공장']] as const;
@@ -33,6 +33,15 @@ export function Board(): React.ReactElement {
   const popRef = useRef<HTMLDivElement>(null);
 
   const q = useMemo(() => `date=${date}&shift=${shift}&factory=${factory}`, [date, shift, factory]);
+  // 주소에 날짜·근무·공장을 남겨 링크로 공유할 수 있게 한다 (브라우저 판은 해시 주소라 제외)
+  useEffect(() => {
+    if (window.location.hash) return;
+    const sp = new URLSearchParams(window.location.search);
+    const d = sp.get('date'), sh = sp.get('shift'), f = Number(sp.get('factory'));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 첫 진입 때 주소의 값을 반영
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) setDate(d); if (sh === '주간' || sh === '야간') setShift(sh); if (f === 1 || f === 2) setFactory(f);
+  }, []);
+  useEffect(() => { if (!window.location.hash) window.history.replaceState(null, '', `?${q}`); }, [q]);
 
   const load = useCallback(async (): Promise<void> => {
     const r = await fetch(`/api/board?${q}`); if (r.ok) setBoard(await r.json());
@@ -99,7 +108,7 @@ export function Board(): React.ReactElement {
           <div className="flex items-center gap-1 -ml-2">
             <button aria-label="전날" onClick={() => setDate(addDays(date, -1))} className="h-9 w-9 rounded-md text-ink-3 hover:bg-white hover:text-ink text-lg">‹</button>
             <label className="relative">
-              <span className="h-9 px-1 inline-flex items-center text-[28px] font-bold tracking-tight cursor-pointer leading-none">{fmtKo(date)}</span>
+              <h1 className="h-9 px-1 inline-flex items-center text-[28px] font-bold tracking-tight cursor-pointer leading-none m-0">{fmtKo(date)}</h1>
               <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="날짜" />
             </label>
             <button aria-label="다음날" onClick={() => setDate(addDays(date, 1))} className="h-9 w-9 rounded-md text-ink-3 hover:bg-white hover:text-ink text-lg">›</button>
@@ -131,11 +140,12 @@ export function Board(): React.ReactElement {
         </div>
       </div>
 
-      {/* 표 */}
-      <div className="bg-white border border-line rounded-xl overflow-visible">
+      {/* 표 + 오른쪽 요약 */}
+      <div className="grid gap-5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="bg-white border border-line rounded-xl overflow-visible min-w-0">
         <table className="w-full">
           <thead>
-            <tr className="text-xs text-ink-3 border-b border-line">
+            <tr className="text-[13px] text-ink-3 border-b border-line">
               <th className="text-left font-medium pl-4 sm:pl-5 pr-2 sm:pr-3 py-2.5 w-20 sm:w-40">라인</th>
               <th className="text-left font-medium pr-2 sm:pr-3 py-2.5 w-24 sm:w-52">제품</th>
               <th className="text-left font-medium py-2.5">근무자</th>
@@ -149,7 +159,7 @@ export function Board(): React.ReactElement {
             const shown = collapse ? g.posts.filter((p) => !isIdle(p)) : g.posts;
             return (
             <tbody key={g.name}>
-              <tr><td colSpan={4} className="pl-4 sm:pl-5 pt-4 pb-1"><div className="flex items-center gap-3 text-xs font-semibold text-ink-3">{g.name}
+              <tr><td colSpan={4} className="pl-4 sm:pl-5 pt-4 pb-1"><div className="flex items-center gap-3 text-[13px] font-semibold text-ink-3">{g.name}
                 {idleCount > 1 && <button onClick={() => setShowIdle((v) => ({ ...v, [g.name]: !v[g.name] }))} className="font-normal text-ink-3 hover:text-ink underline decoration-line underline-offset-2">{collapse ? `쉬는 라인 ${idleCount}개 보기` : '쉬는 라인 접기'}</button>}
               </div></td></tr>
               {shown.map((p) => {
@@ -166,7 +176,7 @@ export function Board(): React.ReactElement {
                         <i className={`w-1 h-5 rounded-full shrink-0 ${vacant ? 'bg-vac' : idle ? 'bg-line' : 'bg-brand'}`} aria-hidden />
                         <div>
                           <div className={`text-[16px] sm:text-[17px] font-semibold leading-5 ${idle ? 'text-ink-3' : 'text-ink'}`}>{p.code}</div>
-                          {!machine && <div className="text-xs text-ink-3 leading-4">{p.name}</div>}
+                          {!machine && <div className="text-[13px] text-ink-3 leading-4">{p.name}</div>}
                         </div>
                       </div>
                     </td>
@@ -216,7 +226,7 @@ export function Board(): React.ReactElement {
                             <button data-chip="add" aria-label={`${p.code}에 이름 추가`} onClick={() => { setPop({ kind: 'add', postId: p.id }); setQuery(''); }} className={`h-8 w-8 rounded-md text-ink-3 hover:bg-chip hover:text-ink ${ppl.length === 0 && !vacant ? 'border border-dashed border-line' : ''}`}>+</button>
                             {pop?.kind === 'add' && pop.postId === p.id && (
                               <Pop ref={popRef} wide>
-                                <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="이름 검색"
+                                <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="이름 검색…" aria-label="이름 검색" autoComplete="off" spellCheck={false}
                                   onKeyDown={async (e) => { if (e.key === 'Enter' && query.trim()) { setPop(null); const d = await act({ action: 'add', postId: p.id, name: query.trim() }); if (d && !(d.assignments.some((a) => a.post_id === p.id && a.name === query.trim().replace(/\s+/g, '')))) setFlash('추가하지 못했습니다'); } }}
                                   className="mx-2 mt-2 mb-1 h-9 px-2.5 border border-line rounded-md w-[calc(100%-16px)] text-sm focus:border-brand" />
                                 {(board!.suggestions[p.id] ?? []).filter((s) => !query || s.name.includes(query.replace(/\s+/g, ''))).slice(0, 8).map((s) => (
@@ -241,13 +251,53 @@ export function Board(): React.ReactElement {
             );
           })}
         </table>
-        {!board && <div className="py-16 text-center text-ink-3">불러오는 중</div>}
+        {!board && <div className="py-16 text-center text-ink-3">불러오는 중…</div>}
         {board?.copied_from && board.status === '초안' && board.assignments.every((a) => a.source === '복사') && (
-          <div className="px-5 py-3 border-t border-line-2 text-xs text-ink-3">{board.copied_from} 표를 복사했습니다. 바뀐 곳만 고치고 확정하세요.</div>
+          <div className="px-5 py-3 border-t border-line-2 text-[13px] text-ink-3">{board.copied_from} 표를 복사했습니다. 바뀐 곳만 고치고 확정하세요.</div>
         )}
       </div>
-      {flash && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-brand text-white text-sm px-4 py-2.5 rounded-lg shadow-lg">{flash}</div>}
+      <Rail board={board} date={date} shift={shift} />
+      </div>
+      <div role="status" aria-live="polite" className={`fixed bottom-6 left-1/2 -translate-x-1/2 bg-brand text-white text-sm px-4 py-2.5 rounded-lg shadow-lg ${flash ? '' : 'hidden'}`}>{flash}</div>
     </div>
+  );
+}
+
+/** 오른쪽 요약: 오늘 대체 요청 현황과 근무조. 담당자가 팝오버를 열지 않아도 응답을 본다. */
+function Rail({ board, date, shift }: { board: BoardT | null; date: string; shift: Shift }): React.ReactElement {
+  const g = groupsOn(date), gt = groupsOn(addDays(date, 1));
+  const reqs = board?.requests ?? [];
+  const byPost = new Map<string, RequestRow[]>();
+  for (const r of reqs) { if (!byPost.has(r.post_code)) byPost.set(r.post_code, []); byPost.get(r.post_code)!.push(r); }
+  const label = (s: string): string => s === '발송' ? '대기' : s;
+  return (
+    <aside className="flex flex-col gap-5 lg:sticky lg:top-6">
+      <section className="bg-white border border-line rounded-xl">
+        <h2 className="px-4 pt-3.5 pb-2 text-[15px] font-semibold">대체 요청</h2>
+        {reqs.length === 0 ? <p className="px-4 pb-4 text-[14px] text-ink-2">이름을 누르고 「결근 처리」를 하면 후보 3명에게 요청이 나가고 여기에 답이 쌓입니다.</p> : (
+          <ul className="px-4 pb-3 flex flex-col gap-3">
+            {[...byPost.entries()].map(([code, list]) => (
+              <li key={code}>
+                <div className="text-[14px] font-semibold">{code}<span className="ml-2 font-normal text-ink-2">{list[0].vacated_name ? `${list[0].vacated_name} 결근` : '빈 자리'}</span></div>
+                <ul className="mt-1 flex flex-col">
+                  {list.sort((a, b) => a.rank - b.rank).map((r) => (
+                    <li key={r.id} className="flex items-center gap-2 h-7 text-[14px]"><span className="w-14 truncate">{r.name}</span><span className={`w-9 ${r.status === '수락' ? 'text-ok font-semibold' : r.status === '발송' ? 'text-ink' : 'text-ink-3'}`}>{label(r.status)}</span><span className="ml-auto text-[13px] text-ink-3 tabular-nums">{r.sent_at.slice(11, 16)}</span></li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <section className="bg-white border border-line rounded-xl">
+        <h2 className="px-4 pt-3.5 pb-2 text-[15px] font-semibold">근무조</h2>
+        <dl className="px-4 pb-3 grid grid-cols-[4.5rem_1fr] gap-y-1 text-[14px]">
+          <dt className="text-ink-2">{fmtShort(date)}</dt><dd>주간 <b>{g.day}조</b> · 야간 <b>{g.night}조</b> · <span className="text-ink-2">휴무 {g.off}조</span></dd>
+          <dt className="text-ink-2">{fmtShort(addDays(date, 1))}</dt><dd>주간 <b>{gt.day}조</b> · 야간 <b>{gt.night}조</b> · <span className="text-ink-2">휴무 {gt.off}조</span></dd>
+        </dl>
+        <p className="px-4 pb-3.5 text-[13px] text-ink-3">{shift === '주간' ? `오늘 주간은 ${g.day}조 근무, ${g.off}조가 대체 1순위` : `오늘 야간은 ${g.night}조 근무, ${g.off}조가 대체 1순위`}</p>
+      </section>
+    </aside>
   );
 }
 
@@ -255,7 +305,7 @@ function Seg({ value, options, onChange }: { value: string; options: readonly (r
   return (
     <div className="inline-flex h-9 p-0.5 rounded-md bg-line-2" role="group">
       {options.map(([v, label]) => (
-        <button key={v} onClick={() => onChange(v)} className={`px-3.5 rounded text-sm transition-colors ${value === v ? 'bg-white text-ink font-semibold shadow-sm' : 'text-ink-2 hover:text-ink'}`}>{label}</button>
+        <button key={v} onClick={() => onChange(v)} className={`px-3.5 rounded text-sm transition-colors ${value === v ? 'bg-white text-ink font-semibold' : 'text-ink-2 hover:text-ink'}`}>{label}</button>
       ))}
     </div>
   );

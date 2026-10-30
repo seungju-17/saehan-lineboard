@@ -18,7 +18,7 @@ export function MyWork({ token }: { token: string }): React.ReactElement {
   async function read(id: number): Promise<void> {
     await fetch('/api/public/me', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, messageId: id }) }); await load();
   }
-  if (!d) return <p className="text-ink-3">불러오는 중</p>;
+  if (!d) return <p className="text-ink-3">불러오는 중…</p>;
   if (d.error) return <p className="text-ink-2">{d.error}</p>;
   const unread = d.messages.filter((m) => !m.read_at && m.kind !== '요청');
   return (

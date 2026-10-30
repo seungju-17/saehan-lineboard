@@ -7,7 +7,7 @@
   --color-brand-soft: #e7ecf5;
   --color-ink: #1c2230;
   --color-ink-2: #566070;
-  --color-ink-3: #8a93a3;
+  --color-ink-3: #667085;
   --color-line: #e3e7ee;
   --color-line-2: #eef1f5;
   --color-chip: #eef1f5;
@@ -24,6 +24,9 @@
   body { margin: 0; -webkit-font-smoothing: antialiased; }
   button, input, select { font: inherit; color: inherit; }
   button { cursor: pointer; }
+  button, a, select, input { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  h1, h2, h3 { text-wrap: balance; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
   button:focus-visible, input:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
 }
 

@@ -90,9 +90,9 @@ function Confirm({ q, onDone }: { q: { message: string; resolve: (v: boolean) =>
   if (!q) return null;
   const answer = (v: boolean): void => { q.resolve(v); onDone(); };
   return (
-    <div className="fixed inset-0 z-50 bg-ink/40 flex items-center justify-center p-6" onClick={() => answer(false)}>
-      <div className="bg-white rounded-xl p-5 w-full max-w-sm shadow-[0_16px_48px_rgba(27,37,55,0.25)]" onClick={(e) => e.stopPropagation()}>
-        <div className="text-[17px] font-semibold leading-snug">{q.message}</div>
+    <div className="fixed inset-0 z-50 bg-ink/40 flex items-center justify-center p-6 overscroll-contain" onClick={() => answer(false)} onKeyDown={(e) => { if (e.key === 'Escape') answer(false); }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="confirm-msg" className="bg-white rounded-xl p-5 w-full max-w-sm shadow-[0_16px_48px_rgba(27,37,55,0.25)]" onClick={(e) => e.stopPropagation()}>
+        <div id="confirm-msg" className="text-[17px] font-semibold leading-snug">{q.message}</div>
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={() => answer(false)} className="h-10 px-4 rounded-md border border-line text-[15px] hover:border-ink-3">취소</button>
           <button autoFocus onClick={() => answer(true)} className="h-10 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2">확인</button>
@@ -119,7 +119,7 @@ export function App(): React.ReactElement {
   return (
     <div className="min-h-screen bg-ground">
       <Nav />
-      <div className="bg-brand-soft text-brand text-xs"><div className="mx-auto max-w-6xl px-4 sm:px-6 h-8 flex items-center gap-2 truncate"><span className="font-semibold">브라우저 안에서 그대로 실행 중</span><span className="text-brand/70">새로고침하면 처음 상태로 돌아갑니다. 엑셀 저장은 설치판에서만 됩니다.</span></div></div>
+      <div className="bg-brand-soft text-brand text-[13px]"><div className="mx-auto max-w-6xl px-4 sm:px-6 py-1.5 flex flex-wrap items-center gap-x-2"><span className="font-semibold">브라우저 안에서 그대로 실행 중</span><span className="text-brand/80">새로고침하면 처음 상태로 돌아갑니다.</span></div></div>
       <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-8">{page}</main>
       <Confirm q={q} onDone={() => setQ(null)} />
     </div>

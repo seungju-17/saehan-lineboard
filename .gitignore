@@ -46,3 +46,5 @@ next-env.d.ts
 
 # single-file build output
 /demo/dist/
+
+/.taste-skill/
