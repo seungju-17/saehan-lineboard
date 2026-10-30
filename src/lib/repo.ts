@@ -119,9 +119,12 @@ export function addPerson(boardId: number, postId: number, personId: number, sou
   db.prepare('UPDATE board_posts SET vacant=0 WHERE board_id=? AND post_id=?').run(boardId, postId);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action) VALUES (?,?,?,'추가')").run(boardId, postId, personId);
 }
+function ensureBp(boardId: number, postId: number, db: DB): void {
+  db.prepare('INSERT INTO board_posts (board_id, post_id) VALUES (?,?) ON CONFLICT DO NOTHING').run(boardId, postId);
+}
 export function removePerson(boardId: number, postId: number, personId: number, absent: boolean, db: DB = getDb()): void {
   db.prepare('DELETE FROM assignments WHERE board_id=? AND post_id=? AND person_id=?').run(boardId, postId, personId);
-  if (absent) db.prepare('UPDATE board_posts SET vacant=1 WHERE board_id=? AND post_id=?').run(boardId, postId);
+  if (absent) { ensureBp(boardId, postId, db); db.prepare('UPDATE board_posts SET vacant=1 WHERE board_id=? AND post_id=?').run(boardId, postId); }
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action) VALUES (?,?,?,?)").run(boardId, postId, personId, absent ? '결근' : '빼기');
 }
 export function clearVacancy(boardId: number, postId: number, db: DB = getDb()): void {
@@ -146,6 +149,7 @@ export function sendRequests(boardId: number, postId: number, vacatedId: number 
     ins.run(boardId, postId, c.personId, vacatedId, startRank + i + 1, c.reasons.join(' · '), t, expires);
     sendMessage(c.personId, '요청', requestMessage({ date: b.date, shift: b.shift, factory: fac, post: post.name, product }), `/r/${t}`, db);
   });
+  ensureBp(boardId, postId, db);
   db.prepare('UPDATE board_posts SET vacant=1 WHERE board_id=? AND post_id=?').run(boardId, postId);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action, detail) VALUES (?,?,?,'대체요청',?)").run(boardId, postId, vacatedId, `${ranked.length}명`);
   return { sent: ranked.length, candidates: ranked.map((c) => ({ name: c.name, reasons: c.reasons })) };

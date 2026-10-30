@@ -2,6 +2,7 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Board as BoardT, RequestRow } from '@/lib/repo';
 import { addDays, currentShiftSeoul, fmtKo, todaySeoul, type Shift } from '@/lib/shift';
+import { ask } from '@/lib/ask';
 
 const FACTORIES = [[1, '1공장'], [2, '2공장']] as const;
 type Popover = { kind: 'person'; postId: number; personId: number } | { kind: 'add'; postId: number } | { kind: 'vacancy'; postId: number } | null;
@@ -67,7 +68,7 @@ export function Board(): React.ReactElement {
     for (const r of board?.requests ?? []) { if (!m.has(r.post_id)) m.set(r.post_id, []); m.get(r.post_id)!.push(r); }
     return m;
   }, [board]);
-  const isVacant = (p: PostT): boolean => (byPost.get(p.id)?.length ?? 0) === 0 && (p.vacant === 1 || (p.kind === 'machine' && !!p.product));
+  const isVacant = (p: PostT): boolean => Number(p.vacant) === 1 || ((byPost.get(p.id)?.length ?? 0) === 0 && p.kind === 'machine' && !!p.product);
   const total = board?.assignments.length ?? 0;
   const vacantCount = board?.posts.filter(isVacant).length ?? 0;
   const waiting = board?.requests.filter((r) => r.status === '발송').length ?? 0;
@@ -85,7 +86,7 @@ export function Board(): React.ReactElement {
     setFlash(r.filled === 0 ? (r.need === 0 ? '채울 자리가 없습니다' : '넣을 수 있는 사람이 없습니다') : `${r.lines}개 라인에 ${r.filled}명을 넣었습니다. 확인 후 확정하세요.`);
   }
   async function confirm(): Promise<void> {
-    if (!window.confirm(`${total}명에게 알림을 보냅니다.`)) return;
+    if (!(await ask(`${total}명에게 알림을 보냅니다.`))) return;
     const d = await act({ action: 'confirm' });
     if (d) setFlash(`확정했습니다 · 알림 ${(d as BoardT & { notified: number }).notified}건`);
   }
@@ -135,20 +136,20 @@ export function Board(): React.ReactElement {
         <table className="w-full">
           <thead>
             <tr className="text-xs text-ink-3 border-b border-line">
-              <th className="text-left font-medium pl-5 pr-3 py-2.5 w-32 sm:w-40">라인</th>
-              <th className="text-left font-medium pr-3 py-2.5 w-40 sm:w-52">제품</th>
+              <th className="text-left font-medium pl-4 sm:pl-5 pr-2 sm:pr-3 py-2.5 w-20 sm:w-40">라인</th>
+              <th className="text-left font-medium pr-2 sm:pr-3 py-2.5 w-24 sm:w-52">제품</th>
               <th className="text-left font-medium py-2.5">근무자</th>
-              <th className="text-right font-medium pr-5 py-2.5 w-14">인원</th>
+              <th className="text-right font-medium pr-5 py-2.5 w-14 hidden sm:table-cell">인원</th>
             </tr>
           </thead>
           {groups.map((g) => {
-            const isIdle = (p: PostT): boolean => p.kind === 'machine' && !p.product && (byPost.get(p.id)?.length ?? 0) === 0;
+            const isIdle = (p: PostT): boolean => p.kind === 'machine' && !p.product && (byPost.get(p.id)?.length ?? 0) === 0 && Number(p.vacant) !== 1;
             const idleCount = g.posts.filter(isIdle).length;
             const collapse = idleCount > 1 && !showIdle[g.name];
             const shown = collapse ? g.posts.filter((p) => !isIdle(p)) : g.posts;
             return (
             <tbody key={g.name}>
-              <tr><td colSpan={4} className="pl-5 pt-4 pb-1"><div className="flex items-center gap-3 text-xs font-semibold text-ink-3">{g.name}
+              <tr><td colSpan={4} className="pl-4 sm:pl-5 pt-4 pb-1"><div className="flex items-center gap-3 text-xs font-semibold text-ink-3">{g.name}
                 {idleCount > 1 && <button onClick={() => setShowIdle((v) => ({ ...v, [g.name]: !v[g.name] }))} className="font-normal text-ink-3 hover:text-ink underline decoration-line underline-offset-2">{collapse ? `쉬는 라인 ${idleCount}개 보기` : '쉬는 라인 접기'}</button>}
               </div></td></tr>
               {shown.map((p) => {
@@ -157,26 +158,26 @@ export function Board(): React.ReactElement {
                 const open = reqs.filter((r) => r.status === '발송').length;
                 const vacant = isVacant(p);
                 const machine = p.kind === 'machine';
-                const idle = machine && !p.product && ppl.length === 0;
+                const idle = machine && !p.product && ppl.length === 0 && !vacant;
                 return (
                   <tr key={p.id} className={`border-t border-line-2 ${vacant ? 'bg-vac-bg' : ''} ${idle ? 'text-ink-3' : ''}`}>
-                    <td className="pl-5 pr-3 py-2.5 align-middle">
-                      <div className="flex items-center gap-2.5">
+                    <td className="pl-4 sm:pl-5 pr-2 sm:pr-3 py-2.5 align-middle">
+                      <div className="flex items-center gap-2 sm:gap-2.5">
                         <i className={`w-1 h-5 rounded-full shrink-0 ${vacant ? 'bg-vac' : idle ? 'bg-line' : 'bg-brand'}`} aria-hidden />
                         <div>
-                          <div className={`text-[17px] font-semibold leading-5 ${idle ? 'text-ink-3' : 'text-ink'}`}>{p.code}</div>
+                          <div className={`text-[16px] sm:text-[17px] font-semibold leading-5 ${idle ? 'text-ink-3' : 'text-ink'}`}>{p.code}</div>
                           {!machine && <div className="text-xs text-ink-3 leading-4">{p.name}</div>}
                         </div>
                       </div>
                     </td>
-                    <td className="pr-3 py-2.5 align-middle">
+                    <td className="pr-2 sm:pr-3 py-2.5 align-middle">
                       {machine && (editing === p.id
                         ? <input autoFocus defaultValue={p.product ?? ''} onBlur={async (e) => { setEditing(null); if (e.target.value !== (p.product ?? '')) await act({ action: 'product', postId: p.id, product: e.target.value }); }}
                             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} className="w-full h-8 px-2 border border-brand rounded-md text-[15px]" aria-label={`${p.code} 제품`} />
-                        : <button disabled={locked} onClick={() => setEditing(p.id)} className={`h-8 -mx-2 px-2 rounded-md text-left text-[15px] hover:bg-ground disabled:cursor-default ${p.product ? 'font-medium' : 'text-ink-3'}`}>{p.product ?? '—'}</button>)}
+                        : <button disabled={locked} onClick={() => setEditing(p.id)} className={`h-8 -mx-2 px-2 rounded-md text-left text-[14px] sm:text-[15px] hover:bg-ground disabled:cursor-default truncate max-w-full ${p.product ? 'font-medium' : 'text-ink-3'}`}>{p.product ?? '—'}</button>)}
                     </td>
                     <td className="py-2 align-middle">
-                      <div className="relative flex flex-wrap items-center gap-1.5">
+                      <div className="relative flex flex-wrap items-center gap-1.5 whitespace-nowrap">
                         {ppl.map((a) => (
                           <span key={a.id} className="relative">
                             <button data-chip="person" disabled={locked} onClick={() => setPop({ kind: 'person', postId: p.id, personId: a.person_id })}
@@ -184,7 +185,7 @@ export function Board(): React.ReactElement {
                             {pop?.kind === 'person' && pop.postId === p.id && pop.personId === a.person_id && (
                               <Pop ref={popRef}>
                                 <div className="px-3 pt-2 pb-1.5 text-xs text-ink-3 border-b border-line-2">{[a.affiliation, a.work_type === '임시' ? '임시' : a.grp !== '미정' ? `${a.grp}조` : null].filter(Boolean).join(' · ') || '정보 없음'}</div>
-                                <PopBtn onClick={async () => { setPop(null); if (!window.confirm(`${a.name} 결근 처리하고 후보 3명에게 요청을 보냅니다.`)) return; const d = await act({ action: 'absent', postId: p.id, personId: a.person_id }); if (d) setFlash(`${(d as BoardT & { sent: number }).sent}명에게 요청을 보냈습니다`); }}>결근 처리</PopBtn>
+                                <PopBtn onClick={async () => { setPop(null); if (!(await ask(`${a.name} 결근 처리하고 후보 3명에게 요청을 보냅니다.`))) return; const d = await act({ action: 'absent', postId: p.id, personId: a.person_id }); if (d) setFlash(`${(d as BoardT & { sent: number }).sent}명에게 요청을 보냈습니다`); }}>결근 처리</PopBtn>
                                 <PopBtn onClick={() => { setPop(null); act({ action: 'remove', postId: p.id, personId: a.person_id }); }}>빼기</PopBtn>
                               </Pop>
                             )}
@@ -232,7 +233,7 @@ export function Board(): React.ReactElement {
                         )}
                       </div>
                     </td>
-                    <td className={`pr-5 py-2.5 text-right text-sm align-middle ${ppl.length ? 'text-ink-2' : 'text-ink-3'}`}>{ppl.length || ''}</td>
+                    <td className={`pr-5 py-2.5 text-right text-sm align-middle hidden sm:table-cell ${ppl.length ? 'text-ink-2' : 'text-ink-3'}`}>{ppl.length || ''}</td>
                   </tr>
                 );
               })}

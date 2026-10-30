@@ -1,0 +1,11 @@
+@import "../src/app/globals.css";
+@source "../src";
+@source "../demo";
+
+@theme {
+  --font-sans: "Noto Sans KR", "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+}
+@layer base {
+  body { background: var(--color-ground); color: var(--color-ink); }
+  html { color-scheme: light; }
+}

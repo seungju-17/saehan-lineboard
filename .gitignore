@@ -43,3 +43,6 @@ next-env.d.ts
 # local db
 /data/*.db
 /data/*.db-*
+
+# single-file build output
+/demo/dist/
