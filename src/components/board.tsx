@@ -100,13 +100,13 @@ export function Board(): React.ReactElement {
   function afterSend(p: PostT, d: BoardT, prefix = ''): void {
     const r = d as BoardT & SendResult;
     const names = (r.candidates ?? []).map((c) => c.name);
-    if (names.length === 0) { setFlash(`${prefix}보낼 후보가 없습니다. 직접 넣거나 라인을 부동 처리하세요.`); setPop({ kind: 'vacancy', postId: p.id }); return; }
-    setFlash(`${prefix}${names.join(' · ')}에게 요청을 보냈습니다. 아래에서 한 명씩 취소할 수 있습니다.`);
+    if (names.length === 0) { setFlash(`${prefix}보낼 후보가 없습니다`); setPop({ kind: 'vacancy', postId: p.id }); return; }
+    setFlash(`${prefix}${names.join(' · ')}에게 요청`);
     setPop({ kind: 'vacancy', postId: p.id });
   }
   async function attend(p: PostT, personId: number, name: string, kind: AttendanceKind): Promise<void> {
     setPop(null);
-    if (kind === '결근' && !(await ask(`${name} 결근 처리하고 후보 3명에게 요청을 보냅니다.\n보낸 뒤 누구에게 갔는지 보이고, 한 명씩 취소할 수 있습니다.`))) return;
+    if (kind === '결근' && !(await ask(`${name} 결근 처리하고 후보 3명에게 요청을 보냅니다.`))) return;
     if ((kind === '연차' || kind === '병가') && !(await ask(`${name} ${kind}로 표시하고 자리를 비웁니다.`))) return;
     const d = await act({ action: 'attend', postId: p.id, personId, kind });
     if (!d) return;
@@ -248,13 +248,13 @@ export function Board(): React.ReactElement {
                             </button>
                             {pop?.kind === 'vacancy' && pop.postId === p.id && (
                               <Pop ref={popRef} wide>
-                                {reqs.length === 0 ? <div className="px-3 py-2 text-sm text-ink-2">아직 요청하지 않았습니다</div> : <div className="px-3 pt-2 pb-1 text-[12px] text-ink-3">요청 받은 사람 {reqs.length}명{open > 0 && ` · 대기 ${open}명 — 「취소」로 한 명씩 거둘 수 있습니다`}</div>}
+                                {reqs.length === 0 && <div className="px-3 py-2 text-sm text-ink-2">아직 요청하지 않았습니다</div>}
                                 {reqs.map((r) => (
-                                  <div key={r.id} className="px-3 py-1.5 text-sm flex items-center gap-2"><span className="font-medium w-16 shrink-0">{r.name}</span><span className={`w-12 shrink-0 ${r.status === '수락' ? 'text-ok font-semibold' : r.status === '발송' ? 'text-ink' : 'text-ink-3'}`}>{r.status === '발송' ? '대기' : r.status}</span><span className="text-ink-3 truncate flex-1">{r.reason}</span>
-                                    {r.status === '발송' && <button onClick={() => act({ action: 'cancel_requests', postId: p.id, requestId: r.id }).then((d) => d && setFlash(`${r.name} 요청을 취소했습니다`))} className="text-[12px] text-ink-3 hover:text-vac shrink-0">취소</button>}</div>
+                                  <div key={r.id} className="px-3 py-1.5 text-sm flex items-center gap-3"><span className="font-medium w-16 shrink-0">{r.name}</span><StatusTag status={r.status} />
+                                    {r.status === '발송' && <button onClick={() => act({ action: 'cancel_requests', postId: p.id, requestId: r.id }).then((d) => d && setFlash(`${r.name} 요청 취소`))} className="ml-auto h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg shrink-0">취소</button>}</div>
                                 ))}
                                 <div className="border-t border-line-2 mt-1">
-                                  {open > 0 && <PopBtn onClick={async () => { setPop(null); if (!(await ask(`${open}명에게 보낸 요청을 취소합니다. 자리는 비어 있음으로 남습니다.`))) return; const d = await act({ action: 'cancel_requests', postId: p.id }); if (d) setFlash(`요청 ${(d as BoardT & { cancelled: number }).cancelled}건을 취소했습니다`); }}>요청 취소 ({open}명)</PopBtn>}
+                                  {open > 0 && <PopBtn onClick={async () => { setPop(null); if (!(await ask(`${open}명에게 보낸 요청을 모두 취소합니다.`))) return; const d = await act({ action: 'cancel_requests', postId: p.id }); if (d) setFlash(`요청 ${(d as BoardT & { cancelled: number }).cancelled}건 취소`); }}>전체 취소 ({open}명)</PopBtn>}
                                   <PopBtn onClick={() => { setPop({ kind: 'add', postId: p.id }); setQuery(''); }}>다른 라인에서 옮겨 넣기 · 직접 넣기</PopBtn>
                                   {reqs.length === 0 ? <PopBtn onClick={async () => { setPop(null); const d = await act({ action: 'send', postId: p.id }); if (d) afterSend(p, d); }}>후보에게 요청</PopBtn>
                                     : <PopBtn onClick={async () => { setPop(null); const d = await act({ action: 'next', postId: p.id }); if (d) afterSend(p, d, '다음 후보 '); }}>다음 후보에게</PopBtn>}
@@ -308,7 +308,7 @@ export function Board(): React.ReactElement {
           <div className="px-5 py-3 border-t border-line-2 text-[13px] text-ink-3">{board.copied_from} 표를 복사했습니다. 바뀐 곳만 고치고 {twoStep ? '입안' : '확정'}하세요.</div>
         )}
       </div>
-      <Rail board={board} date={date} shift={shift} onCancel={(r) => act({ action: 'cancel_requests', postId: r.post_id, requestId: r.id }).then((d) => d && setFlash(`${r.name} 요청을 취소했습니다`))} />
+      <Rail board={board} date={date} shift={shift} onCancel={(r) => act({ action: 'cancel_requests', postId: r.post_id, requestId: r.id }).then((d) => d && setFlash(`${r.name} 요청 취소`))} />
       </div>
       <div role="status" aria-live="polite" className={`fixed top-20 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-2rem)] bg-brand text-white text-sm px-4 py-2.5 rounded-lg shadow-lg ${flash ? '' : 'hidden'}`}>{flash}</div>
     </div>
@@ -321,7 +321,6 @@ function Rail({ board, date, shift, onCancel }: { board: BoardT | null; date: st
   const reqs = board?.requests ?? [];
   const byPost = new Map<string, RequestRow[]>();
   for (const r of reqs) { if (!byPost.has(r.post_code)) byPost.set(r.post_code, []); byPost.get(r.post_code)!.push(r); }
-  const label = (s: string): string => s === '발송' ? '대기' : s;
   const att = board?.attendance ?? [];
   return (
     <aside className="flex flex-col gap-5 lg:sticky lg:top-6">
@@ -334,7 +333,7 @@ function Rail({ board, date, shift, onCancel }: { board: BoardT | null; date: st
                 <div className="text-[14px] font-semibold">{code}<span className="ml-2 font-normal text-ink-2">{list[0].vacated_name ? `${list[0].vacated_name} 결근` : '빈 자리'}</span></div>
                 <ul className="mt-1 flex flex-col">
                   {list.sort((a, b) => a.rank - b.rank).map((r) => (
-                    <li key={r.id} className="flex items-center gap-2 h-7 text-[14px]"><span className="w-14 truncate">{r.name}</span><span className={`w-9 ${r.status === '수락' ? 'text-ok font-semibold' : r.status === '발송' ? 'text-ink' : 'text-ink-3'}`}>{label(r.status)}</span><span className="ml-auto text-[13px] text-ink-3 tabular-nums">{r.sent_at.slice(11, 16)}</span>{r.status === '발송' && onCancel && <button onClick={() => onCancel(r)} className="text-[12px] text-ink-3 hover:text-vac">취소</button>}</li>
+                    <li key={r.id} className="flex items-center gap-2 h-7 text-[14px]"><span className="w-14 truncate">{r.name}</span><StatusTag status={r.status} /><span className="ml-auto text-[13px] text-ink-3 tabular-nums">{r.sent_at.slice(11, 16)}</span>{r.status === '발송' && onCancel && <button onClick={() => onCancel(r)} className="h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg">취소</button>}</li>
                   ))}
                 </ul>
               </li>
@@ -374,4 +373,10 @@ const Pop = forwardRef<HTMLDivElement, { children: React.ReactNode; wide?: boole
 });
 function PopBtn({ children, onClick, muted }: { children: React.ReactNode; onClick: () => void; muted?: boolean }): React.ReactElement {
   return <button onClick={onClick} className={`w-full text-left px-3 h-10 text-[15px] hover:bg-ground ${muted ? 'text-ink-3' : ''}`}>{children}</button>;
+}
+
+/** 요청 상태 표시: 대기(주황) · 수락(초록) · 취소/만료/거절(빨강·회색) */
+export function StatusTag({ status }: { status: string }): React.ReactElement {
+  const cls = status === '발송' ? 'text-wait bg-wait-bg' : status === '수락' ? 'text-ok bg-ok-bg' : status === '취소' ? 'text-vac bg-vac-bg' : 'text-ink-3 bg-chip';
+  return <span className={`inline-flex items-center h-5 px-1.5 rounded text-[12px] font-semibold ${cls}`}>{status === '발송' ? '대기' : status}</span>;
 }

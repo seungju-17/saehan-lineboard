@@ -17,6 +17,8 @@
   --color-vac-bg: #fdf0ee;
   --color-ok: #1d7a4a;
   --color-ok-bg: #e8f5ee;
+  --color-wait: #b7791f;
+  --color-wait-bg: #fdf4e3;
 }
 
 @layer base {

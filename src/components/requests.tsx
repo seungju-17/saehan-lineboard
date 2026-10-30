@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type { RequestRow } from '@/lib/repo';
 import { fmtShort } from '@/lib/shift';
+import { StatusTag } from './board';
 
 const FAC: Record<number, string> = { 1: '1공장', 2: '2공장' };
 
@@ -41,7 +42,7 @@ export function Requests({ initial }: { initial: RequestRow[] }): React.ReactEle
                     : <span className="text-sm font-semibold text-vac bg-vac-bg px-2 h-6 inline-flex items-center rounded">미충원</span>}
                   {!accepted && <span className="ml-auto flex gap-1.5">
                     <button onClick={() => act(f, 'next')} className="h-8 px-3 rounded-md border border-line text-sm font-medium hover:border-ink-3">다음 후보에게</button>
-                    {open.length > 0 && <button onClick={() => act(f, 'cancel_requests')} className="h-8 px-2.5 rounded-md text-sm text-ink-3 hover:bg-ground">요청 취소</button>}
+                    {open.length > 0 && <button onClick={() => act(f, 'cancel_requests')} className="h-8 px-2.5 rounded-md text-sm text-vac hover:bg-vac-bg">전체 취소</button>}
                     <button onClick={() => act(f, 'cancel')} className="h-8 px-2.5 rounded-md text-sm text-ink-3 hover:bg-ground">자리 닫기</button>
                   </span>}
                 </div>
@@ -50,11 +51,11 @@ export function Requests({ initial }: { initial: RequestRow[] }): React.ReactEle
                     <li key={r.id} className="flex items-center gap-3 py-2 text-[15px]">
                       <span className="w-5 text-xs text-ink-3">{r.rank}</span>
                       <span className="font-medium w-16">{r.name}</span>
-                      <span className={`text-sm w-10 ${r.status === '수락' ? 'text-ok font-semibold' : r.status === '발송' ? 'text-ink' : 'text-ink-3'}`}>{r.status === '발송' ? '대기' : r.status}</span>
+                      <StatusTag status={r.status} />
                       <span className="text-sm text-ink-3 truncate">{r.reason}</span>
                       <span className="ml-auto text-xs text-ink-3 shrink-0">{r.sent_at.slice(11, 16)}{r.responded_at ? ` → ${r.responded_at.slice(11, 16)}` : ''}</span>
                       {r.status === '발송' && <a href={`/r/${r.token}`} target="_blank" rel="noreferrer" className="text-xs text-ink-2 underline shrink-0">수락 화면</a>}
-                      {r.status === '발송' && <button onClick={() => act(r, 'cancel_requests', r.id)} className="text-xs text-ink-3 hover:text-vac shrink-0">취소</button>}
+                      {r.status === '발송' && <button onClick={() => act(r, 'cancel_requests', r.id)} className="h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg shrink-0">취소</button>}
                     </li>
                   ))}
                 </ul>
