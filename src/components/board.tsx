@@ -254,14 +254,7 @@ export function Board(): React.ReactElement {
                                   <div key={r.id} className="px-3 h-8 text-sm flex items-center gap-2"><span className="font-medium w-14 shrink-0 truncate">{r.name}</span><StatusTag status={r.status} />
                                     {r.status === '발송' && <button onClick={() => act({ action: 'cancel_requests', postId: p.id, requestId: r.id }).then((d) => d && setFlash(`${r.name} 요청 취소`))} className="h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg shrink-0">취소</button>}</div>
                                 ))}
-                                <div className="border-t border-line-2 mt-0.5 pt-0.5">
-                                  {open > 0 && <PopBtn compact onClick={async () => { setPop(null); if (!(await ask(`${open}명에게 보낸 요청을 모두 취소합니다.`))) return; const d = await act({ action: 'cancel_requests', postId: p.id }); if (d) setFlash(`요청 ${(d as BoardT & { cancelled: number }).cancelled}건 취소`); }}>전체 취소 ({open}명)</PopBtn>}
-                                  <PopBtn compact onClick={() => { setPop({ kind: 'add', postId: p.id }); setQuery(''); }}>직접 넣기 · 옮겨 넣기</PopBtn>
-                                  {reqs.length === 0 ? <PopBtn compact onClick={async () => { setPop(null); const d = await act({ action: 'send', postId: p.id }); if (d) afterSend(p, d); }}>후보에게 요청</PopBtn>
-                                    : <PopBtn compact onClick={async () => { setPop(null); const d = await act({ action: 'next', postId: p.id }); if (d) afterSend(p, d, '다음 후보 '); }}>다음 후보에게</PopBtn>}
-                                  {machine && <PopBtn compact onClick={() => { setPop(null); act({ action: 'stop', postId: p.id, stopped: true }).then((d) => d && setFlash(`${p.code} 부동 처리했습니다`)); }}>라인 부동 (세움)</PopBtn>}
-                                  {!(p.kind === 'machine' && p.product) && <PopBtn compact onClick={() => { setPop(null); act({ action: 'cancel', postId: p.id }); }} muted>자리 닫기</PopBtn>}
-                                </div>
+                                {reqs.length === 0 && <div className="border-t border-line-2 mt-0.5 pt-0.5"><PopBtn compact onClick={async () => { setPop(null); const d = await act({ action: 'send', postId: p.id }); if (d) afterSend(p, d); }}>후보에게 요청</PopBtn></div>}
                               </Pop>
                             )}
                           </span>
