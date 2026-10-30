@@ -369,10 +369,10 @@ function Seg({ value, options, onChange }: { value: string; options: readonly (r
   );
 }
 const Pop = forwardRef<HTMLDivElement, { children: React.ReactNode; wide?: boolean }>(function Pop({ children, wide }, ref) {
-  return <div ref={ref} className={`absolute z-20 top-9 left-0 ${wide ? 'w-80' : 'w-52'} py-1 bg-white border border-line rounded-lg shadow-[0_8px_24px_rgba(28,34,48,0.12)]`}>{children}</div>;
+  return <div ref={ref} className={`absolute z-20 top-9 left-0 ${wide ? 'w-80' : 'w-52'} py-1 whitespace-normal bg-white border border-line rounded-lg shadow-[0_8px_24px_rgba(28,34,48,0.12)]`}>{children}</div>;
 });
 function PopBtn({ children, onClick, muted, compact }: { children: React.ReactNode; onClick: () => void; muted?: boolean; compact?: boolean }): React.ReactElement {
-  return <button onClick={onClick} className={`w-full text-left px-3 ${compact ? 'h-8 text-[14px]' : 'h-10 text-[15px]'} hover:bg-ground ${muted ? 'text-ink-3' : ''}`}>{children}</button>;
+  return <button onClick={onClick} className={`block w-full text-left px-3 whitespace-nowrap ${compact ? 'h-8 text-[14px]' : 'h-10 text-[15px]'} hover:bg-ground ${muted ? 'text-ink-3' : ''}`}>{children}</button>;
 }
 
 /** 요청 상태 표시: 대기(주황) · 수락(초록) · 취소/만료/거절(빨강·회색) */
