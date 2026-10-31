@@ -1,6 +1,6 @@
 /* 브라우저 판: /api/* 호출을 서버 없이 repo 함수로 바로 연결한다. src/app/api/* 와 같은 동작. */
 import { getDb } from './db-shim';
-import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, myWork, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
+import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, monthSummary, myWork, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
 import { currentShiftSeoul, todaySeoul, type Shift } from '../src/lib/shift';
 import { getStats } from '../src/lib/stats';
 import { ask, makeClient, explainApiError, type ChatMessage } from '../src/lib/assistant';
@@ -14,6 +14,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
   const path = u.pathname;
   try {
     if (path === '/api/board') {
+      if (method === 'GET' && u.searchParams.get('month')) return json({ dates: monthSummary(u.searchParams.get('month')!, u.searchParams.get('shift') as Shift, Number(u.searchParams.get('factory'))) });
       const src = method === 'GET' ? Object.fromEntries(u.searchParams) : body;
       const date = String(src.date ?? ''), shift = String(src.shift ?? '') as Shift, factory = Number(src.factory);
       if (!date || !shift || !factory) return json({ error: 'date, shift, factory' }, 400);

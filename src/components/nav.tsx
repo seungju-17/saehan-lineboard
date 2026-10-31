@@ -4,35 +4,44 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from '@/lib/use-session';
 import { CAN } from '@/lib/rules';
 
-const items = [['/today', '오늘 배치'], ['/dashboard', '현황'], ['/requests', '대체 요청'], ['/people', '직원'], ['/settings', '설정']] as const;
+/** 왼쪽 세로 메뉴(시프티처럼 진한 남회색 띠 + 선 아이콘). 좁은 화면에서는 위 가로 메뉴. 역할(팀장·담당자·반장)에 따라 직원·설정은 숨긴다. */
+const ITEMS: { href: string; label: string; icon: React.ReactNode }[] = [
+  { href: '/today', label: '오늘 배치', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" /></svg> },
+  { href: '/dashboard', label: '현황', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg> },
+  { href: '/requests', label: '대체 요청', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h13l-3-3M20 17H7l3 3" /></svg> },
+  { href: '/people', label: '직원', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4.5-6.2" /></svg> },
+  { href: '/settings', label: '설정', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg> },
+];
 
-/** 관리자 화면 위 메뉴. 역할(팀장·담당자·반장)에 따라 직원·설정은 숨긴다. */
 export function Nav(): React.ReactElement {
   const path = usePathname();
   const router = useRouter();
   const s = useSession();
   const role = s?.kind === 'admin' ? s.role : undefined;
   async function logout(): Promise<void> { await fetch('/api/login', { method: 'DELETE' }); router.push('/login'); router.refresh(); }
-  const shown = items.filter(([href]) => CAN.manage(role) || (href !== '/people' && href !== '/settings'));
+  const shown = ITEMS.filter((it) => CAN.manage(role) || (it.href !== '/people' && it.href !== '/settings'));
   return (
-    <header className="bg-white border-b border-line print:hidden">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 h-14 flex items-center gap-4 sm:gap-8 whitespace-nowrap overflow-x-auto">
-        <Link href="/today" className="flex items-center gap-2.5">
-          <span className="grid grid-cols-2 gap-0.5 w-4 h-4" aria-hidden><i className="bg-brand rounded-[1px]" /><i className="bg-brand/40 rounded-[1px]" /><i className="bg-brand/40 rounded-[1px]" /><i className="bg-brand rounded-[1px]" /></span>
-          <span className="font-extrabold text-[18px] tracking-tight text-ink">새한프라텍</span>
-          <span className="hidden sm:inline text-xs text-ink-3 pl-2 border-l border-line">인원 배치 · 지원팀</span>
-        </Link>
-        <nav className="flex gap-0 sm:gap-1 -ml-3 shrink-0">
-          {shown.map(([href, label]) => {
-            const on = path.startsWith(href);
-            return <Link key={href} href={href} className={`relative px-2.5 sm:px-3 h-14 inline-flex items-center text-[14px] sm:text-[15px] font-medium ${on ? 'text-brand font-bold' : 'text-ink-2 hover:text-ink'}`}>{label}{on && <span className="absolute left-3 right-3 bottom-0 h-[3px] bg-brand rounded-t" />}</Link>;
-          })}
-        </nav>
-        <span className="ml-auto shrink-0 flex items-center gap-3 text-sm">
-          {s?.kind === 'admin' && <span className="text-ink-2"><b className="text-ink">{s.name}</b> <span className="text-ink-3">· {s.role}</span></span>}
-          <button onClick={logout} className="h-9 px-3 rounded-lg border border-line text-ink-2 hover:border-brand hover:text-brand">나가기</button>
-        </span>
+    <aside className="print:hidden bg-rail text-white lg:w-[220px] lg:shrink-0 lg:min-h-screen lg:sticky lg:top-0 lg:self-start flex lg:flex-col">
+      <div className="hidden lg:flex items-center gap-2.5 px-5 h-16 border-b border-white/10">
+        <span className="grid grid-cols-2 gap-0.5 w-4 h-4" aria-hidden><i className="bg-white rounded-[1px]" /><i className="bg-white/50 rounded-[1px]" /><i className="bg-white/50 rounded-[1px]" /><i className="bg-white rounded-[1px]" /></span>
+        <span className="font-extrabold text-[17px] tracking-tight">새한프라텍</span>
       </div>
-    </header>
+      <nav aria-label="주 메뉴" className="flex lg:flex-col gap-0.5 lg:gap-1 px-2 lg:px-3 lg:py-4 h-14 lg:h-auto items-center lg:items-stretch overflow-x-auto whitespace-nowrap flex-1">
+        <Link href="/today" className="lg:hidden flex items-center gap-2 pr-3 mr-1 border-r border-white/15 font-extrabold text-[16px] tracking-tight shrink-0">새한프라텍</Link>
+        {shown.map((it) => {
+          const on = path.startsWith(it.href);
+          return (
+            <Link key={it.href} href={it.href} aria-current={on ? 'page' : undefined}
+              className={`flex items-center gap-2.5 h-10 lg:h-11 px-3 rounded-lg text-[14px] lg:text-[15px] shrink-0 ${on ? 'bg-white/15 text-white font-bold' : 'text-white/75 hover:bg-white/10 hover:text-white'}`}>
+              <span className={on ? 'text-white' : 'text-white/70'}>{it.icon}</span>{it.label}
+            </Link>
+          );
+        })}
+      </nav>
+      <div className="flex items-center gap-2 px-3 lg:px-4 lg:py-4 lg:border-t lg:border-white/10 text-[13px] shrink-0">
+        {s?.kind === 'admin' && <span className="hidden sm:inline text-white/70 lg:flex-1 truncate"><b className="text-white">{s.name}</b> <span className="text-white/50">· {s.role}</span></span>}
+        <button onClick={logout} className="h-8 px-2.5 rounded-md text-white/70 hover:bg-white/10 hover:text-white">나가기</button>
+      </div>
+    </aside>
   );
 }

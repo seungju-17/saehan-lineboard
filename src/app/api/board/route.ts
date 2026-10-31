@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { type AttendanceKind, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, nextCandidates, removePerson, sendRequests, setProduct, unconfirmBoard, autoFill, setNeed } from '@/lib/repo';
+import { type AttendanceKind, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, monthSummary, nextCandidates, removePerson, sendRequests, setProduct, unconfirmBoard, autoFill, setNeed } from '@/lib/repo';
 import type { Shift } from '@/lib/shift';
 
 type Key = { date: string; shift: Shift; factory: number };
@@ -11,7 +11,9 @@ function key(p: URLSearchParams | Record<string, unknown>): Key | null {
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const k = key(new URL(req.url).searchParams);
+  const sp = new URL(req.url).searchParams;
+  if (sp.get('month')) return NextResponse.json({ dates: monthSummary(sp.get('month')!, sp.get('shift') as Shift, Number(sp.get('factory'))) });
+  const k = key(sp);
   if (!k) return NextResponse.json({ error: 'date, shift, factory' }, { status: 400 });
   return NextResponse.json(getBoard(k.date, k.shift, k.factory));
 }

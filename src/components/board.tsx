@@ -6,6 +6,7 @@ import { addDays, currentShiftSeoul, fmtKo, fmtShort, groupsOn, todaySeoul, type
 import { ask } from '@/lib/ask';
 import { groupColor, zoneColor } from '@/lib/colors';
 import { useSession } from '@/lib/use-session';
+import { MonthPicker } from '@/components/month-picker';
 
 const FACTORIES = [[1, '1공장'], [2, '2공장']] as const;
 type Popover = { kind: 'person'; postId: number; personId: number } | { kind: 'add'; postId: number } | { kind: 'vacancy'; postId: number } | { kind: 'line'; postId: number } | null;
@@ -21,6 +22,7 @@ export function Board(): React.ReactElement {
   const [flash, setFlash] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
   const [needEdit, setNeedEdit] = useState<number | null>(null);
+  const [cal, setCal] = useState(false);
   const [noteEdit, setNoteEdit] = useState(false);
   const [query, setQuery] = useState('');
   const [showIdle, setShowIdle] = useState<Record<string, boolean>>({});
@@ -47,7 +49,7 @@ export function Board(): React.ReactElement {
   useEffect(() => { if (pop?.kind === 'vacancy') popRef.current?.scrollIntoView({ block: 'nearest' }); }, [pop]);
   useEffect(() => {
     function onDoc(e: MouseEvent): void { if (popRef.current && !popRef.current.contains(e.target as Node)) setPop(null); }
-    function onKey(e: KeyboardEvent): void { if (e.key === 'Escape') setPop(null); }
+    function onKey(e: KeyboardEvent): void { if (e.key === 'Escape') { setPop(null); setCal(false); } }
     document.addEventListener('mousedown', onDoc); document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
   }, []);
@@ -132,10 +134,13 @@ export function Board(): React.ReactElement {
         <div>
           <div className="flex items-center gap-1 -ml-2">
             <button aria-label="전날" onClick={() => setDate(addDays(date, -1))} className="h-9 w-9 rounded-md text-ink-3 hover:bg-white hover:text-ink text-lg">‹</button>
-            <label className="relative">
-              <h1 className="h-9 px-1 inline-flex items-center text-[28px] font-bold tracking-tight cursor-pointer leading-none m-0">{fmtKo(date)}</h1>
-              <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="날짜" />
-            </label>
+            <span className="relative">
+              <button onClick={() => setCal((v) => !v)} aria-haspopup="dialog" aria-expanded={cal} aria-label={`날짜 고르기, 지금 ${fmtKo(date)}`} className="h-9 px-1 inline-flex items-center gap-2 rounded-md hover:bg-white">
+                <h1 className="text-[28px] font-bold tracking-tight leading-none m-0">{fmtKo(date)}</h1>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-ink-3"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+              {cal && <MonthPicker date={date} shift={shift} factory={factory} onPick={setDate} onClose={() => setCal(false)} />}
+            </span>
             <button aria-label="다음날" onClick={() => setDate(addDays(date, 1))} className="h-9 w-9 rounded-md text-ink-3 hover:bg-white hover:text-ink text-lg">›</button>
           </div>
           <div className="mt-1.5 text-sm text-ink-2 flex flex-wrap items-center gap-x-2">
@@ -157,7 +162,7 @@ export function Board(): React.ReactElement {
           <Seg value={shift} options={[['주간', '주간'], ['야간', '야간']]} onChange={(v) => setShift(v as Shift)} />
           <Seg value={String(factory)} options={FACTORIES.map(([id, n]) => [String(id), n])} onChange={(v) => setFactory(Number(v))} />
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2 whitespace-nowrap">
           <a href={`/print?${q}`} target="_blank" className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">인쇄</a>
           <a href={`/api/board/export?${q}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">엑셀</a>
           <a href={`/api/attendance/export?month=${date.slice(0, 7)}&factory=${factory}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">월 근태표</a>

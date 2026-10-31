@@ -132,10 +132,12 @@ export function App(): React.ReactElement {
   else if (path === '/login') page = <DemoLogin />;
   else page = <Board />;
   return (
-    <div className="min-h-screen lb-sky">
+    <div className="min-h-screen lb-sky lg:flex">
       <Nav />
-      <div className="bg-brand-soft text-brand text-[13px]"><div className="mx-auto max-w-6xl px-4 sm:px-6 py-1.5 flex flex-wrap items-center gap-x-2"><span className="font-semibold">브라우저 안에서 그대로 실행 중</span><span className="text-brand/80">새로고침하면 처음 상태로 돌아갑니다.</span></div></div>
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-8 pb-24">{page}</main>
+      <div className="flex-1 min-w-0">
+        <div className="bg-brand-soft text-brand text-[13px]"><div className="px-4 sm:px-6 lg:px-10 py-1.5 flex flex-wrap items-center gap-x-2"><span className="font-semibold">브라우저 안에서 그대로 실행 중</span><span className="text-brand/80">새로고침하면 처음 상태로 돌아갑니다. 「나가기」로 역할을 바꿀 수 있습니다.</span></div></div>
+        <main className="px-4 sm:px-6 lg:px-10 py-6 sm:py-8 pb-24 max-w-[1240px]">{page}</main>
+      </div>
       <Assistant needsKey />
       <Confirm q={q} onDone={() => setQ(null)} />
     </div>

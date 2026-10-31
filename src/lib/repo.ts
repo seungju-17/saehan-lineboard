@@ -9,7 +9,7 @@ export type Post = { id: number; factory_id: number; code: string; name: string;
 export type PersonRow = Person & { affiliation: string | null; role: string | null; gender: string | null; phone: string | null; home_factory_id: number | null; unit: string };
 export type Assignment = { id: number; post_id: number; person_id: number; source: string; name: string; affiliation: string | null; grp: string; work_type: string; gender: string | null; home_factory_id: number | null; unit: string };
 export type AttendanceRow = { person_id: number; kind: string; note: string | null; name: string };
-import { DEFAULT_SETTINGS, SETTING_RANGE, VACATING_KINDS, OPTIONAL_KINDS, type AttendanceKind, type Settings, type Role } from './rules';
+import { DEFAULT_SETTINGS, SETTING_RANGE, VACATING_KINDS, OPTIONAL_KINDS, isVacantPost, type AttendanceKind, type Settings, type Role } from './rules';
 export { ATTENDANCE_KINDS, DEFAULT_SETTINGS, VACATING_KINDS, OPTIONAL_KINDS, isVacantPost, needFor, CAN, type AttendanceKind, type Settings, type VacancyInput, type Role } from './rules';
 export type RequestRow = { id: number; board_id: number; post_id: number; person_id: number; vacated_person_id: number | null; rank: number; reason: string | null; status: string; token: string; channel: string; sent_at: string; expires_at: string | null; responded_at: string | null; name: string; affiliation: string | null; post_code: string; post_name: string; date: string; shift: Shift; factory_id: number; vacated_name: string | null; vacated_kind: string | null; product: string | null };
 export type Board = {
@@ -83,6 +83,19 @@ export function ensureBoard(date: string, shift: Shift, factoryId: number, db: D
   return id;
 }
 
+/** 달력용: 그 달에 있는 표의 상태·근무 인원·빈 자리 수 */
+export function monthSummary(month: string, shift: Shift, factoryId: number, db: DB = getDb()): { date: string; status: string; vacant: number; workers: number }[] {
+  const rows = db.prepare('SELECT id, date, status FROM boards WHERE shift=? AND factory_id=? AND date LIKE ? ORDER BY date').all(shift, factoryId, `${month}-%`) as { id: number; date: string; status: string }[];
+  const ps = posts(factoryId, db);
+  return rows.map((b) => {
+    const bp = new Map((db.prepare('SELECT post_id, product, vacant, stopped, need FROM board_posts WHERE board_id=?').all(b.id) as { post_id: number; product: string | null; vacant: number; stopped: number; need: number | null }[]).map((r) => [r.post_id, r]));
+    const cnt = new Map<number, number>();
+    let workers = 0;
+    for (const r of db.prepare('SELECT post_id FROM assignments WHERE board_id=?').all(b.id) as { post_id: number }[]) { cnt.set(r.post_id, (cnt.get(r.post_id) ?? 0) + 1); workers++; }
+    const vacant = ps.filter((p) => { const x = bp.get(p.id); return isVacantPost({ kind: p.kind, unmanned: p.unmanned, product: x?.product ?? null, vacant: x?.vacant ?? 0, stopped: x?.stopped ?? 0, need: x?.need ?? null }, cnt.get(p.id) ?? 0); }).length;
+    return { date: b.date, status: b.status, vacant, workers };
+  });
+}
 export function getBoard(date: string, shift: Shift, factoryId: number, db: DB = getDb()): Board {
   const id = ensureBoard(date, shift, factoryId, db);
   expireDue(db);
