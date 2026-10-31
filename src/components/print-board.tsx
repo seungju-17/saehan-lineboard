@@ -66,7 +66,7 @@ export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: 
                     <td className={`py-1.5 align-middle ${p.stopped ? 'line-through text-ink-3' : 'font-medium'}`}>{p.product ?? ''}</td>
                     <td className="py-1 align-middle">
                       <span className="inline-flex flex-wrap gap-1">
-                        {ppl.map((a) => { const gc = a.source === '대체' ? { ink: '#2a9d6f', bg: '#e8f5ee' } : groupColor(a.grp, a.work_type); const k = att.find((t) => t.person_id === a.person_id); return (
+                        {ppl.map((a) => { const gc = a.source === '대체' ? { ink: '#2a9d6f', bg: '#e1f4ec' } : groupColor(a.grp, a.work_type); const k = att.find((t) => t.person_id === a.person_id); return (
                           <span key={a.id} className="inline-flex items-center h-6 pl-1.5 pr-2 rounded-sm font-semibold border-l-4" style={{ background: gc.bg, borderLeftColor: gc.ink }}>{a.name}{a.home_factory_id && a.home_factory_id !== b.factory_id ? <span className="ml-1 text-[11px] font-normal text-ink-3">{a.home_factory_id}공장</span> : null}{k ? <span className="ml-1 text-[11px]" style={{ color: '#c8362b' }}>{k.kind}</span> : null}</span>
                         ); })}
                         {vacant && <span className="inline-flex items-center h-6 px-2 rounded-sm font-bold text-white" style={{ background: '#c8362b' }}>비어 있음{need > 1 ? ` ${ppl.length}/${need}` : ''}</span>}

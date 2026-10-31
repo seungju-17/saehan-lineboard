@@ -246,10 +246,10 @@ export function Board(): React.ReactElement {
                           return (
                           <span key={a.id} className="relative">
                             <button data-chip="person" disabled={locked} onClick={() => setPop({ kind: 'person', postId: p.id, personId: a.person_id })}
-                              className={`h-8 pl-2.5 pr-3 rounded-md text-sm font-medium disabled:cursor-default border-l-4 hover:brightness-95 ${a.source === '자동' ? 'border-dashed' : ''}`}
-                              style={{ background: a.source === '대체' ? '#e8f5ee' : groupColor(a.grp, a.work_type).bg, color: a.source === '대체' ? '#2a9d6f' : '#1c2230', borderLeftColor: a.source === '대체' ? '#2a9d6f' : groupColor(a.grp, a.work_type).ink }}
+                              className={`h-8 px-3 rounded-[5px] text-sm font-semibold text-white disabled:cursor-default hover:brightness-110 ${a.source === '자동' ? 'ring-2 ring-inset ring-white/60' : a.source === '대체' ? 'ring-2 ring-inset ring-white/70' : ''}`}
+                              style={{ background: a.source === '대체' ? '#2a9d6f' : groupColor(a.grp, a.work_type).ink, outline: a.source === '자동' ? '2px dashed rgba(255,255,255,.7)' : undefined, outlineOffset: '-3px' }}
                               title={`${groupColor(a.grp, a.work_type).label || a.grp}${a.source === '대체' ? ' · 대체 투입' : a.source === '자동' ? ' · 자동 채우기' : ''}`}>
-                              {a.name}{away ? <span className="ml-1 text-[11px] font-normal text-ink-3">{a.home_factory_id}공장</span> : null}{att && <span className="ml-1 text-[11px] font-semibold text-vac">{att.kind}</span>}
+                              {a.name}{a.source === '대체' ? <span className="ml-1 text-[11px] font-normal text-white/85">대체</span> : null}{away ? <span className="ml-1 text-[11px] font-normal text-white/80">{a.home_factory_id}공장</span> : null}{att && <span className="ml-1 text-[11px] font-bold bg-white/90 text-vac px-1 rounded">{att.kind}</span>}
                             </button>
                             {pop?.kind === 'person' && pop.postId === p.id && pop.personId === a.person_id && (
                               <Pop ref={popRef} wide>
