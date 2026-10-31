@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     ".taste-skill/**",
     "demo/dist/**",
   ]),
+  // 로고는 작은 데이터 URI 하나뿐이라 next/image 최적화가 필요 없다
+  { rules: { '@next/next/no-img-element': 'off' } },
 ]);
 
 export default eslintConfig;

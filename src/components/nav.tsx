@@ -33,7 +33,7 @@ export function Nav(): React.ReactElement {
   return (
     <aside className="print:hidden bg-rail text-white lg:w-[220px] lg:shrink-0 lg:min-h-screen lg:sticky lg:top-0 lg:self-start flex lg:flex-col">
       <div className="hidden lg:flex items-center px-5 h-16 border-b border-white/10">
-        <Link href="/today" className="flex items-center"><img src={LOGO_WHITE} alt="새한프라텍" className="h-[22px] w-auto" /></Link>
+        <Link href="/today" className="flex items-center"><img src={LOGO_WHITE} alt="새한프라텍" className="h-7 w-auto" /></Link>
       </div>
       <nav aria-label="주 메뉴" className="flex lg:flex-col gap-0.5 lg:gap-1 px-2 lg:px-3 lg:py-4 h-14 lg:h-auto items-center lg:items-stretch overflow-x-auto whitespace-nowrap flex-1">
         <Link href="/today" className="lg:hidden flex items-center pr-3 mr-1 border-r border-white/15 shrink-0"><img src={LOGO_WHITE} alt="새한프라텍" className="h-[18px] w-auto" /></Link>
