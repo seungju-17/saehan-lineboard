@@ -81,5 +81,5 @@ function Form(): React.ReactElement {
   );
 }
 export default function Login(): React.ReactElement {
-  return <main className="min-h-screen bg-ground flex items-center justify-center p-6"><Suspense><Form /></Suspense></main>;
+  return <main className="min-h-screen lb-sky flex items-center justify-center p-6"><Suspense><Form /></Suspense></main>;
 }

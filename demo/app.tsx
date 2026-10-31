@@ -132,7 +132,7 @@ export function App(): React.ReactElement {
   else if (path === '/login') page = <DemoLogin />;
   else page = <Board />;
   return (
-    <div className="min-h-screen bg-ground">
+    <div className="min-h-screen lb-sky">
       <Nav />
       <div className="bg-brand-soft text-brand text-[13px]"><div className="mx-auto max-w-6xl px-4 sm:px-6 py-1.5 flex flex-wrap items-center gap-x-2"><span className="font-semibold">브라우저 안에서 그대로 실행 중</span><span className="text-brand/80">새로고침하면 처음 상태로 돌아갑니다.</span></div></div>
       <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-8 pb-24">{page}</main>
