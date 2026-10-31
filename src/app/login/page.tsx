@@ -44,7 +44,7 @@ function Form(): React.ReactElement {
     <div className="w-full max-w-sm bg-white border border-line rounded-2xl p-8 flex flex-col gap-5">
       <div className="flex items-center gap-2.5">
         <span className="grid grid-cols-2 gap-0.5 w-5 h-5" aria-hidden><i className="bg-brand rounded-[1px]" /><i className="bg-brand/40 rounded-[1px]" /><i className="bg-brand/40 rounded-[1px]" /><i className="bg-brand rounded-[1px]" /></span>
-        <span className="text-[22px] font-bold tracking-tight">라인보드</span>
+        <span className="text-[22px] font-bold tracking-tight">새한프라텍</span>
       </div>
       <p className="text-sm text-ink-2 -mt-2">새한프라텍 인원 배치 · 결원 대체</p>
       <div className="flex gap-1 p-1 bg-ground rounded-lg">{tab('admin', '관리자')}{tab('worker', '근무자')}</div>

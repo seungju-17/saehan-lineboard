@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
-export const metadata: Metadata = { title: '라인보드', description: '새한프라텍 인원 배치' };
+export const metadata: Metadata = { title: '새한프라텍 인원 배치', description: '새한프라텍 인원 배치 · 결원 대체' };
 export const viewport: Viewport = { width: 'device-width', initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }): React.ReactElement {

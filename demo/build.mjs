@@ -27,7 +27,7 @@ const sqljs = fs.readFileSync(abs('node_modules/sql.js/dist/sql-wasm.js'), 'utf8
 const wasm = fs.readFileSync(abs('node_modules/sql.js/dist/sql-wasm.wasm')).toString('base64');
 const db = fs.readFileSync(process.env.LINEBOARD_DB ?? abs('data/lineboard.db')).toString('base64');
 
-const html = `<title>라인보드</title>
+const html = `<title>새한프라텍 인원 배치</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
 <style>${css}</style>
 <div id="root"></div>
@@ -39,8 +39,8 @@ fs.writeFileSync(out, html);
 console.log('wrote', out, (fs.statSync(out).size / 1024 / 1024).toFixed(2) + 'MB');
 
 // GitHub Pages용 완전한 문서 (docs/index.html)
-const pages = `<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="description" content="새한프라텍 인원 배치·결원 대체 라인보드 (브라우저 판)">\n`
-  + html.replace('<title>라인보드</title>', '<title>라인보드 · 새한프라텍</title>')
+const pages = `<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="description" content="새한프라텍 인원 배치·결원 대체 (브라우저 판)">\n`
+  + html.replace('<title>새한프라텍 인원 배치</title>', '<title>새한프라텍 인원 배치 (체험판)</title>')
         .replace('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">', '<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">')
         .replace('<div id="root"></div>', '</head>\n<body>\n<div id="root"></div>')
   + '\n</body>\n</html>\n';
