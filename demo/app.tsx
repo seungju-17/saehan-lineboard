@@ -11,6 +11,7 @@ import { MyWork } from '../src/app/(public)/me/[token]/my-work';
 import { adminInbox, allRequests, ensureToken, factoryName, getBoard, getSettings, listAccounts, people, requestByToken, weekHoursFor } from '../src/lib/repo';
 import { SettingsForm } from '../src/components/settings';
 import { Inbox } from '../src/components/inbox';
+import { LOGO } from '../src/lib/logo';
 import { fmtKo, SHIFT_HOURS, todaySeoul, type Shift } from '../src/lib/shift';
 import { refreshSession } from '../src/lib/use-session';
 import { setAsk } from '../src/lib/ask';
@@ -62,7 +63,7 @@ function Public({ children, back }: { children: React.ReactNode; back?: boolean 
   return (
     <main className="min-h-screen bg-ground">
       <div className="mx-auto max-w-md min-h-screen bg-white px-5 py-6 pb-24 flex flex-col gap-6">
-        <div className="flex items-center gap-2 text-ink-3"><Mark /><span className="text-sm font-semibold text-ink">새한프라텍</span><span className="text-xs">근무자 휴대폰 화면</span></div>
+        <div className="flex items-center gap-2.5 text-ink-3"><img src={LOGO} alt="새한프라텍" className="h-[18px] w-auto" /><span className="text-xs">근무자 휴대폰 화면</span></div>
         {children}
         {back !== false && <a href="/today" className="mt-auto text-sm text-ink-3 underline underline-offset-2">담당자 화면으로 돌아가기</a>}
       </div>

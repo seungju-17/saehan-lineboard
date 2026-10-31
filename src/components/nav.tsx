@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from '@/lib/use-session';
 import { CAN } from '@/lib/rules';
 import { useEffect, useState } from 'react';
+import { LOGO_WHITE } from '@/lib/logo';
 
 /** 왼쪽 세로 메뉴(시프티처럼 진한 남회색 띠 + 선 아이콘). 좁은 화면에서는 위 가로 메뉴. 역할(팀장·담당자·반장)에 따라 직원·설정은 숨긴다. */
 const ITEMS: { href: string; label: string; icon: React.ReactNode }[] = [
@@ -31,12 +32,11 @@ export function Nav(): React.ReactElement {
   }, [path]);
   return (
     <aside className="print:hidden bg-rail text-white lg:w-[220px] lg:shrink-0 lg:min-h-screen lg:sticky lg:top-0 lg:self-start flex lg:flex-col">
-      <div className="hidden lg:flex items-center gap-2.5 px-5 h-16 border-b border-white/10">
-        <span className="grid grid-cols-2 gap-0.5 w-4 h-4" aria-hidden><i className="bg-white rounded-[1px]" /><i className="bg-white/50 rounded-[1px]" /><i className="bg-white/50 rounded-[1px]" /><i className="bg-white rounded-[1px]" /></span>
-        <span className="font-extrabold text-[17px] tracking-tight">새한프라텍</span>
+      <div className="hidden lg:flex items-center px-5 h-16 border-b border-white/10">
+        <Link href="/today" className="flex items-center"><img src={LOGO_WHITE} alt="새한프라텍" className="h-[22px] w-auto" /></Link>
       </div>
       <nav aria-label="주 메뉴" className="flex lg:flex-col gap-0.5 lg:gap-1 px-2 lg:px-3 lg:py-4 h-14 lg:h-auto items-center lg:items-stretch overflow-x-auto whitespace-nowrap flex-1">
-        <Link href="/today" className="lg:hidden flex items-center gap-2 pr-3 mr-1 border-r border-white/15 font-extrabold text-[16px] tracking-tight shrink-0">새한프라텍</Link>
+        <Link href="/today" className="lg:hidden flex items-center pr-3 mr-1 border-r border-white/15 shrink-0"><img src={LOGO_WHITE} alt="새한프라텍" className="h-[18px] w-auto" /></Link>
         {shown.map((it) => {
           const on = path.startsWith(it.href);
           return (

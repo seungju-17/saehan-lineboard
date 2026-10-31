@@ -2,6 +2,7 @@ import type { Board } from '@/lib/repo';
 import { isVacantPost, needFor } from '@/lib/rules';
 import { fmtKo, SHIFT_HOURS } from '@/lib/shift';
 import { groupColor, zoneColor } from '@/lib/colors';
+import { LOGO } from '@/lib/logo';
 
 /** 인쇄용 배치표. 구역별 색 띠, 굵은 라인 번호, 조별 색 이름표. 2공장은 결재란(팀장·입안·심사/합의·결정)을 양식대로 둔다. */
 export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: string; action?: React.ReactNode }): React.ReactElement {
@@ -23,6 +24,7 @@ export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: 
     <div className="mx-auto max-w-3xl print:max-w-none bg-white border border-line rounded-xl p-6 print:border-0 print:p-0 print:rounded-none text-ink">
       <div className="flex items-start justify-between gap-4 mb-3">
         <div>
+          <img src={LOGO} alt="새한프라텍" className="h-5 w-auto mb-2" />
           <div className="text-[26px] font-extrabold leading-tight">{factoryName} 인원 배치표</div>
           <div className="mt-1 text-[17px] font-semibold">{fmtKo(b.date)} · {b.shift} <span className="font-normal text-ink-2">{SHIFT_HOURS[b.shift]}</span></div>
           <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[14px]">
