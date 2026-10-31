@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { type AttendanceKind, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, monthSummary, nextCandidates, removePerson, sendRequests, setProduct, unconfirmBoard, autoFill, setNeed } from '@/lib/repo';
+import { type AttendanceKind, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, monthSummary, nextCandidates, removePerson, returnBoard, sendRequests, setProduct, unconfirmBoard, autoFill, setNeed } from '@/lib/repo';
 import type { Shift } from '@/lib/shift';
 
 type Key = { date: string; shift: Shift; factory: number };
@@ -32,6 +32,7 @@ type Action =
   | { action: 'note'; note: string | null }
   | { action: 'attend'; postId: number | null; personId: number; kind: AttendanceKind | null; note?: string | null; request?: boolean }
   | { action: 'propose' }
+  | { action: 'return'; note?: string | null }
   | { action: 'autofill' }
   | { action: 'confirm' }
   | { action: 'unconfirm' };
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       case 'note': setNote(board.id, body.note ?? null); break;
       case 'attend': extra = setAttendance(board.id, body.postId ?? null, body.personId, body.kind ?? null, body.note ?? null, undefined, typeof body.request === 'boolean' ? body.request : undefined); break;
       case 'propose': proposeBoard(board.id); break;
+      case 'return': returnBoard(board.id, body.note ?? null); break;
       case 'autofill': extra = autoFill(board.id); break;
       case 'confirm': extra = confirmBoard(board.id); break;
       case 'unconfirm': unconfirmBoard(board.id); break;

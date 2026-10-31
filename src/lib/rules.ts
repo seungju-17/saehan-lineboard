@@ -6,6 +6,10 @@ export type AttendanceKind = typeof ATTENDANCE_KINDS[number];
 export const VACATING_KINDS: AttendanceKind[] = ['결근', '연차', '병가'];
 export const OPTIONAL_KINDS: AttendanceKind[] = ['반차', '조퇴', '교육'];
 
+/** 근무자가 폰에서 신청할 수 있는 휴가 종류 */
+export const LEAVE_KINDS = ['연차', '반차', '병가'] as const;
+export type LeaveKind = typeof LEAVE_KINDS[number];
+
 export type VacancyInput = { kind: string; unmanned: number; product: string | null; vacant: number; stopped: number; need?: number | null };
 /** 그 자리에 필요한 인원. 정해 둔 값이 있으면 그 값, 없으면 제품이 걸린 유인 라인은 1명, 그 밖에는 0. 무인·부동은 0. */
 export function needFor(p: VacancyInput, count: number): number {

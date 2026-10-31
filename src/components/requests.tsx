@@ -53,7 +53,7 @@ export function Requests({ initial }: { initial: RequestRow[] }): React.ReactEle
                       <span className="font-medium w-16">{r.name}</span>
                       <StatusTag status={r.status} />
                       {r.status === '발송' && <button onClick={() => act(r, 'cancel_requests', r.id)} className="h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg shrink-0">취소</button>}
-                      <span className="text-sm text-ink-3 truncate">{r.reason}</span>
+                      <span className="flex flex-wrap gap-1 min-w-0">{(r.reason ?? '').split(' · ').filter(Boolean).map((t) => <span key={t} className="inline-flex items-center gap-1 h-6 px-2 rounded border border-brand/30 text-brand text-[12px] whitespace-nowrap"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6" /></svg>{t}</span>)}</span>
                       <span className="ml-auto text-xs text-ink-3 shrink-0">{r.sent_at.slice(11, 16)}{r.responded_at ? ` → ${r.responded_at.slice(11, 16)}` : ''}</span>
                       {r.status === '발송' && <a href={`/r/${r.token}`} target="_blank" rel="noreferrer" className="text-xs text-ink-2 underline shrink-0">수락 화면</a>}
                     </li>

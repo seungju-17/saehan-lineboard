@@ -5,7 +5,7 @@ import { currentShiftSeoul, fmtKo, fmtShort, todaySeoul, type Shift } from '@/li
 import { groupColor } from '@/lib/colors';
 
 /* 차트 색: dataviz 검증기를 통과한 범주 팔레트 5칸(고정 순서). 글자는 항상 글자색. */
-const SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'];
+const SERIES = ['#2b63d9', '#e8932e', '#2a9d6f', '#8b919c', '#1e3a66'];
 const FACTORIES = [[1, '1공장'], [2, '2공장']] as const;
 
 export function Dashboard(): React.ReactElement {
@@ -89,9 +89,9 @@ function KpiTile({ k, baseline }: { k: Kpi; baseline: { date: string; label: str
   const cls = k.delta === null || k.delta === 0 ? 'text-ink-3' : good === null ? 'text-ink-2' : good ? 'text-ok' : 'text-vac';
   const base = baseline ? `${fmtShort(baseline.date).split(' ')[0]} 같은 조 대비` : '비교할 지난 근무 없음';
   return (
-    <div className="bg-white border border-line rounded-xl px-4 py-3.5 min-w-0 border-t-4" style={{ borderTopColor: k.key === 'vacant' ? (Number(k.value) > 0 ? '#c8362b' : '#1d7a4a') : k.key === 'waiting' ? (Number(k.value) > 0 ? '#b7791f' : '#e3e7ee') : k.key === 'rate' ? '#1d7a4a' : k.key === 'temps' ? '#6b4e16' : '#1b2537' }}>
+    <div className="bg-white border border-line rounded-xl px-4 py-3.5 min-w-0 border-t-4" style={{ borderTopColor: k.key === 'vacant' ? (Number(k.value) > 0 ? '#c8362b' : '#2a9d6f') : k.key === 'waiting' ? (Number(k.value) > 0 ? '#d97f1f' : '#e3e7ee') : k.key === 'rate' ? '#2a9d6f' : k.key === 'temps' ? '#7c5a1e' : '#1e3a66' }}>
       <div className="text-[13px] text-ink-2 truncate">{k.label}</div>
-      <div className={`mt-1 text-[28px] font-semibold leading-none tabular-nums ${k.small ? 'text-ink-2' : ''}`} style={{ color: k.key === 'vacant' && Number(k.value) > 0 ? '#c8362b' : k.key === 'waiting' && Number(k.value) > 0 ? '#b7791f' : undefined }}>{k.value}<span className="ml-0.5 text-[14px] font-normal text-ink-3">{k.unit}</span></div>
+      <div className={`mt-1 text-[28px] font-semibold leading-none tabular-nums ${k.small ? 'text-ink-2' : ''}`} style={{ color: k.key === 'vacant' && Number(k.value) > 0 ? '#c8362b' : k.key === 'waiting' && Number(k.value) > 0 ? '#d97f1f' : undefined }}>{k.value}<span className="ml-0.5 text-[14px] font-normal text-ink-3">{k.unit}</span></div>
       {k.denom && <div className="mt-1 text-[12px] text-ink-2 tabular-nums">{k.denom}{k.small && <span className="ml-1.5 text-ink-3 bg-chip px-1 rounded">표본 적음</span>}</div>}
       <div className={`mt-1 text-[12px] ${cls} tabular-nums`}>
         {k.delta === null ? <span className="text-ink-3">{k.key === 'waiting' ? '지금 기다리는 중' : k.key === 'rate' ? (k.small ? '5자리 넘으면 의미 있음' : '요청한 자리 기준') : base}</span>
@@ -151,7 +151,7 @@ function Segmented({ parts }: { parts: { label: string; count: number }[] }): Re
 /** 깔때기: 한 색의 밝기 단계, 첫 단계 대비 비율 */
 function Funnel({ steps }: { steps: { label: string; count: number }[] }): React.ReactElement {
   const first = steps[0].count || 1;
-  const shades = ['#2a78d6', '#5c98e0', '#9bbfec'];
+  const shades = ['#2b63d9', '#6a94e6', '#aec4f1'];
   return (
     <ul className="flex flex-col gap-2.5">
       {steps.map((st, i) => (

@@ -3,9 +3,9 @@
 @theme {
   --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   /* 시프티 느낌: 흰 바탕에 연한 하늘빛, 선명한 파랑 하나, 진한 검정 제목 */
-  --color-brand: #1f5fe8;
-  --color-brand-2: #174dc2;
-  --color-brand-soft: #e8effd;
+  --color-brand: #2b63d9;
+  --color-brand-2: #1f4fb3;
+  --color-brand-soft: #e7eefb;
   --color-ink: #111827;
   --color-ink-2: #4b5563;
   --color-ink-3: #6b7280;
@@ -13,22 +13,22 @@
   --color-line-2: #eef2f8;
   --color-chip: #eef2f8;
   --color-paper: #ffffff;
-  --color-ground: #f5f8fe;
+  --color-ground: #f3f5f9;
   --color-navy: #111827;
-  --color-rail: #3e4c6a;
+  --color-rail: #1e3a66;
   --color-vac: #c8362b;
   --color-vac-bg: #fdf0ee;
-  --color-ok: #1d7a4a;
-  --color-ok-bg: #e8f5ee;
-  --color-wait: #b7791f;
-  --color-wait-bg: #fdf4e3;
+  --color-ok: #2a9d6f;
+  --color-ok-bg: #e4f5ed;
+  --color-wait: #d97f1f;
+  --color-wait-bg: #fdf0e0;
 }
 
 @layer base {
   html { font-family: var(--font-sans); color: var(--color-ink); background: var(--color-ground); font-feature-settings: "tnum"; }
   /* 흰 카드는 테두리 대신 부드러운 그림자로 떠 보이게 (시프티 카드) */
   .bg-white.border.rounded-xl, .bg-white.border.rounded-2xl { border-color: #e9eef7; box-shadow: 0 6px 22px rgba(31, 95, 232, 0.06); }
-  .lb-sky { background: linear-gradient(180deg, #e9f0ff 0%, #f5f8fe 60%, #ffffff 100%); }
+  .lb-sky { background: #f3f5f9; }
   h1 { font-weight: 800; letter-spacing: -0.02em; }
   body { margin: 0; -webkit-font-smoothing: antialiased; }
   button, input, select { font: inherit; color: inherit; }

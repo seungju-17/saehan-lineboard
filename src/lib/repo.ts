@@ -9,11 +9,11 @@ export type Post = { id: number; factory_id: number; code: string; name: string;
 export type PersonRow = Person & { affiliation: string | null; role: string | null; gender: string | null; phone: string | null; home_factory_id: number | null; unit: string };
 export type Assignment = { id: number; post_id: number; person_id: number; source: string; name: string; affiliation: string | null; grp: string; work_type: string; gender: string | null; home_factory_id: number | null; unit: string };
 export type AttendanceRow = { person_id: number; kind: string; note: string | null; name: string };
-import { DEFAULT_SETTINGS, SETTING_RANGE, VACATING_KINDS, OPTIONAL_KINDS, isVacantPost, type AttendanceKind, type Settings, type Role } from './rules';
-export { ATTENDANCE_KINDS, DEFAULT_SETTINGS, VACATING_KINDS, OPTIONAL_KINDS, isVacantPost, needFor, CAN, type AttendanceKind, type Settings, type VacancyInput, type Role } from './rules';
+import { DEFAULT_SETTINGS, SETTING_RANGE, VACATING_KINDS, OPTIONAL_KINDS, LEAVE_KINDS, isVacantPost, type AttendanceKind, type LeaveKind, type Settings, type Role } from './rules';
+export { ATTENDANCE_KINDS, DEFAULT_SETTINGS, VACATING_KINDS, OPTIONAL_KINDS, LEAVE_KINDS, isVacantPost, needFor, CAN, type AttendanceKind, type LeaveKind, type Settings, type VacancyInput, type Role } from './rules';
 export type RequestRow = { id: number; board_id: number; post_id: number; person_id: number; vacated_person_id: number | null; rank: number; reason: string | null; status: string; token: string; channel: string; sent_at: string; expires_at: string | null; responded_at: string | null; name: string; affiliation: string | null; post_code: string; post_name: string; date: string; shift: Shift; factory_id: number; vacated_name: string | null; vacated_kind: string | null; product: string | null };
 export type Board = {
-  id: number; date: string; shift: Shift; factory_id: number; status: '초안' | '입안' | '확정'; confirmed_at: string | null; copied_from: string | null; note: string | null;
+  id: number; date: string; shift: Shift; factory_id: number; status: '초안' | '입안' | '확정'; confirmed_at: string | null; copied_from: string | null; note: string | null; return_note: string | null;
   posts: (Post & { product: string | null; vacant: number; stopped: number; need: number | null })[];
   assignments: Assignment[];
   attendance: AttendanceRow[];
@@ -46,8 +46,8 @@ export function ensureToken(personId: number, db: DB = getDb()): string {
 
 export function isWeekend(date: string): boolean { const d = new Date(date + 'T00:00:00Z').getUTCDay(); return d === 0 || d === 6; }
 
-function boardRow(date: string, shift: Shift, factoryId: number, db: DB): { id: number; status: '초안' | '입안' | '확정'; confirmed_at: string | null; copied_from: string | null; note: string | null } | undefined {
-  return db.prepare('SELECT id, status, confirmed_at, copied_from, note FROM boards WHERE date=? AND shift=? AND factory_id=?').get(date, shift, factoryId) as never;
+function boardRow(date: string, shift: Shift, factoryId: number, db: DB): { id: number; status: '초안' | '입안' | '확정'; confirmed_at: string | null; copied_from: string | null; note: string | null; return_note: string | null } | undefined {
+  return db.prepare('SELECT id, status, confirmed_at, copied_from, note, return_note FROM boards WHERE date=? AND shift=? AND factory_id=?').get(date, shift, factoryId) as never;
 }
 
 /** 보드가 없으면 직전 보드를 복사해 만든다 (버튼 없음). */
@@ -107,7 +107,7 @@ export function getBoard(date: string, shift: Shift, factoryId: number, db: DB =
   const requests = requestsFor(`r.board_id=${id}`, db);
   const attendance = db.prepare('SELECT t.person_id, t.kind, t.note, p.name FROM attendance t JOIN people p ON p.id=t.person_id WHERE t.date=? AND t.shift=? ORDER BY t.id').all(date, shift) as AttendanceRow[];
   return {
-    id, date, shift, factory_id: factoryId, status: b.status, confirmed_at: b.confirmed_at, copied_from: b.copied_from, note: b.note,
+    id, date, shift, factory_id: factoryId, status: b.status, confirmed_at: b.confirmed_at, copied_from: b.copied_from, note: b.note, return_note: b.return_note,
     posts: ps.map((p) => ({ ...p, product: bp.get(p.id)?.product ?? null, vacant: bp.get(p.id)?.vacant ?? 0, stopped: bp.get(p.id)?.stopped ?? 0, need: bp.get(p.id)?.need ?? null })),
     assignments, requests, attendance, suggestions: suggestionsFor(date, shift, factoryId, ps, assignments, db),
   };
@@ -214,8 +214,68 @@ export function setAttendance(boardId: number, postId: number | null, personId: 
 }
 /** 2공장 결재: 입안(반장) → 결정(팀장=확정). */
 export function proposeBoard(boardId: number, db: DB = getDb()): void {
-  db.prepare("UPDATE boards SET status='입안' WHERE id=? AND status='초안'").run(boardId);
+  db.prepare("UPDATE boards SET status='입안', return_note=NULL WHERE id=? AND status='초안'").run(boardId);
   db.prepare("INSERT INTO logs (board_id, action) VALUES (?, '입안')").run(boardId);
+}
+/** 팀장이 입안을 돌려보냄(반려). 사유가 표 머리에 남고 작성자가 고쳐서 다시 입안한다. */
+export function returnBoard(boardId: number, note: string | null, db: DB = getDb()): void {
+  db.prepare("UPDATE boards SET status='초안', return_note=? WHERE id=? AND status='입안'").run(note && note.trim() ? note.trim() : '사유 없음', boardId);
+  db.prepare("INSERT INTO logs (board_id, action, detail) VALUES (?, '반려', ?)").run(boardId, note ?? null);
+}
+
+/** 근무자 휴가 신청(연차·반차·병가). 담당자가 승인하면 그날 표에 근태로 들어가고, 자리를 비우는 종류면 대체 요청까지 나간다. */
+export type LeaveRow = { id: number; person_id: number; name: string; grp: string; work_type: string; home_factory_id: number | null; date: string; shift: Shift; kind: LeaveKind; note: string | null; status: '신청' | '승인' | '거절'; reply: string | null; decided_by: string | null; created_at: string; decided_at: string | null };
+const LEAVE_SELECT = 'SELECT l.*, p.name, p.grp, p.work_type, p.home_factory_id FROM leave_requests l JOIN people p ON p.id=l.person_id';
+export function requestLeave(personId: number, date: string, shift: Shift, kind: LeaveKind, note: string | null, db: DB = getDb()): { ok: boolean; message: string; id?: number } {
+  if (!LEAVE_KINDS.includes(kind)) return { ok: false, message: '휴가 종류가 올바르지 않습니다' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, message: '날짜가 올바르지 않습니다' };
+  const dup = db.prepare("SELECT id FROM leave_requests WHERE person_id=? AND date=? AND shift=? AND status IN ('신청','승인')").get(personId, date, shift);
+  if (dup) return { ok: false, message: '같은 날 같은 근무에 이미 신청이 있습니다' };
+  const r = db.prepare('INSERT INTO leave_requests (person_id, date, shift, kind, note) VALUES (?,?,?,?,?)').run(personId, date, shift, kind, note && note.trim() ? note.trim() : null);
+  return { ok: true, message: '신청했습니다. 담당자가 승인하면 알림으로 알려 드립니다.', id: Number(r.lastInsertRowid) };
+}
+export function myLeaves(personId: number, db: DB = getDb()): LeaveRow[] {
+  return db.prepare(`${LEAVE_SELECT} WHERE l.person_id=? ORDER BY l.date DESC, l.id DESC LIMIT 30`).all(personId) as LeaveRow[];
+}
+export function pendingLeaves(db: DB = getDb()): LeaveRow[] {
+  return db.prepare(`${LEAVE_SELECT} WHERE l.status='신청' ORDER BY l.date, l.id`).all() as LeaveRow[];
+}
+export function recentLeaves(days = 14, db: DB = getDb()): LeaveRow[] {
+  return db.prepare(`${LEAVE_SELECT} WHERE l.created_at >= datetime('now','localtime', ?) ORDER BY l.id DESC LIMIT 100`).all(`-${days} days`) as LeaveRow[];
+}
+export function decideLeave(id: number, approve: boolean, reply: string | null, by: string, db: DB = getDb()): { ok: boolean; message: string; sent?: number } {
+  const l = db.prepare(`${LEAVE_SELECT} WHERE l.id=?`).get(id) as LeaveRow | undefined;
+  if (!l) return { ok: false, message: '신청을 찾을 수 없습니다' };
+  if (l.status !== '신청') return { ok: false, message: '이미 처리된 신청입니다' };
+  const now = "datetime('now','localtime')";
+  db.prepare(`UPDATE leave_requests SET status=?, reply=?, decided_by=?, decided_at=${now} WHERE id=?`).run(approve ? '승인' : '거절', reply && reply.trim() ? reply.trim() : null, by, id);
+  const md = `${+l.date.slice(5, 7)}/${+l.date.slice(8, 10)}`;
+  if (!approve) { sendMessage(l.person_id, '근태', `[휴가 거절] ${md} ${l.shift} ${l.kind} — ${reply && reply.trim() ? reply.trim() : '담당자에게 문의해 주세요'}`, null, db); return { ok: true, message: '거절했습니다' }; }
+  // 승인: 그날 표(없으면 만들어서)에서 그 사람을 찾아 근태 처리. 연차·병가는 자리를 비우고 대체 요청, 반차는 기록만.
+  let sent = 0;
+  const factoryId = l.home_factory_id ?? 1;
+  const b = getBoard(l.date, l.shift, factoryId, db);
+  const a = b.assignments.find((x) => x.person_id === l.person_id);
+  if (a) sent = setAttendance(b.id, a.post_id, l.person_id, l.kind, l.note, db).sent;
+  else db.prepare('INSERT INTO attendance (date, shift, person_id, kind, note) VALUES (?,?,?,?,?) ON CONFLICT(date, shift, person_id) DO UPDATE SET kind=excluded.kind, note=excluded.note').run(l.date, l.shift, l.person_id, l.kind, l.note);
+  sendMessage(l.person_id, '근태', `[휴가 승인] ${md} ${l.shift} ${l.kind}${reply && reply.trim() ? ' — ' + reply.trim() : ''}`, null, db);
+  return { ok: true, message: a ? `승인했습니다. ${md} 표에서 자리를 비우고 ${sent}명에게 대체 요청을 보냈습니다.` : `승인했습니다. ${md} 표에 근태로 남깁니다.`, sent };
+}
+
+/** 관리자 알림함: 처리할 휴가 신청과 최근 일(수락·거절·신청) */
+export type InboxEvent = { at: string; kind: '수락' | '거절' | '만료' | '휴가신청' | '휴가승인' | '휴가거절'; text: string; link: string };
+export function adminInbox(db: DB = getDb()): { pending: LeaveRow[]; events: InboxEvent[] } {
+  expireDue(db);
+  const pending = pendingLeaves(db);
+  const resp = db.prepare(`SELECT r.status, r.responded_at, p.name, po.code, b.date, b.shift, b.factory_id FROM requests r JOIN people p ON p.id=r.person_id JOIN posts po ON po.id=r.post_id JOIN boards b ON b.id=r.board_id
+    WHERE r.responded_at IS NOT NULL AND r.status IN ('수락','거절') AND r.responded_at >= datetime('now','localtime','-7 days') ORDER BY r.responded_at DESC LIMIT 60`).all() as { status: '수락' | '거절'; responded_at: string; name: string; code: string; date: string; shift: Shift; factory_id: number }[];
+  const md = (d: string): string => `${+d.slice(5, 7)}/${+d.slice(8, 10)}`;
+  const events: InboxEvent[] = resp.map((r) => ({ at: r.responded_at, kind: r.status, text: `${r.name} ${r.status === '수락' ? '수락' : '거절'} · ${md(r.date)} ${r.shift} ${factoryName(r.factory_id, db)} ${r.code}`, link: `/today?date=${r.date}&shift=${r.shift}&factory=${r.factory_id}` }));
+  for (const l of recentLeaves(14, db)) {
+    events.push({ at: l.status === '신청' ? l.created_at : (l.decided_at ?? l.created_at), kind: l.status === '신청' ? '휴가신청' : l.status === '승인' ? '휴가승인' : '휴가거절', text: `${l.name} ${l.kind} ${l.status === '신청' ? '신청' : l.status} · ${md(l.date)} ${l.shift}${l.note ? ' · ' + l.note : ''}`, link: '/inbox' });
+  }
+  events.sort((x, y) => (x.at < y.at ? 1 : -1));
+  return { pending, events: events.slice(0, 80) };
 }
 
 export function setProduct(boardId: number, postId: number, product: string | null, db: DB = getDb()): void {
@@ -306,7 +366,7 @@ export function expireDue(db: DB = getDb()): void {
 
 /** 알림 발송. 지금은 DB에만 저장(데모). 알림톡·SMS 연동 시 이 함수만 바꾼다. */
 /** 알림. 앱 알림함에 쌓이고, 전화번호가 있으면 문자로도 간다(도입 때 문자 발송 연결). channel에 어디로 갔는지 남긴다. */
-export function sendMessage(personId: number, kind: '요청' | '배치' | '변경', body: string, link: string | null, db: DB = getDb()): void {
+export function sendMessage(personId: number, kind: '요청' | '배치' | '변경' | '근태', body: string, link: string | null, db: DB = getDb()): void {
   const p = db.prepare('SELECT phone FROM people WHERE id=?').get(personId) as { phone: string | null } | undefined;
   db.prepare('INSERT INTO messages (person_id, kind, body, link, channel) VALUES (?,?,?,?,?)').run(personId, kind, body, link, p?.phone ? '앱·문자' : '앱');
 }
@@ -440,7 +500,9 @@ export function myWork(tok: string, db: DB = getDb()) {
   const st = getSettings(db);
   const w = weekRange(today);
   const weekShifts = (db.prepare('SELECT COUNT(DISTINCT b.date || b.shift) c FROM assignments a JOIN boards b ON b.id=a.board_id WHERE a.person_id=? AND b.date BETWEEN ? AND ?').get(p.id, w.from, w.to) as { c: number }).c;
-  const attendance = db.prepare('SELECT date, shift, kind, note FROM attendance WHERE person_id=? AND date>=? ORDER BY date DESC, shift').all(p.id, addDays(today, -31)) as { date: string; shift: Shift; kind: string; note: string | null }[];
+  const attendance = db.prepare('SELECT date, shift, kind, note FROM attendance WHERE person_id=? AND date>=? ORDER BY date DESC, shift').all(p.id, addDays(today, -62)) as { date: string; shift: Shift; kind: string; note: string | null }[];
+  const leaves = myLeaves(p.id, db).map((l) => ({ id: l.id, date: l.date, shift: l.shift, kind: l.kind, note: l.note, status: l.status, reply: l.reply }));
+  const workDays = db.prepare('SELECT b.date, b.shift FROM assignments a JOIN boards b ON b.id=a.board_id WHERE a.person_id=? AND b.date>=? ORDER BY b.date').all(p.id, addDays(today, -62)) as { date: string; shift: Shift }[];
   const g = groupsOn(today);
   const dayType = p.work_type === '교대' && ['A', 'B', 'C'].includes(p.grp) ? (p.grp === g.day ? '주간' : p.grp === g.night ? '야간' : '휴무') : p.work_type;
   return {
@@ -450,7 +512,7 @@ export function myWork(tok: string, db: DB = getDb()) {
     messages,
     openRequests: open.map((r) => ({ ...r, factory: facs.get(r.factory_id) ?? '' })),
     week: { from: w.from, to: w.to, shifts: weekShifts, hours: weekShifts * st.shift_hours, max: st.week_max_hours },
-    attendance,
+    attendance, leaves, workDays,
   };
 }
 export function markRead(tok: string, messageId: number, db: DB = getDb()): boolean {

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { openDb } from '../src/lib/db';
 import { addPerson, removePerson, cancelRequests, getSettings, setSettings, weekHoursFor, needFor, setNeed, setProduct, clearVacancy, ensureBoard, getBoard, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
 import { periodFor } from '../src/lib/attendance-xlsx';
-import { loginAccount, personByPhone, myWork, ensureToken } from '../src/lib/repo';
+import { loginAccount, personByPhone, myWork, ensureToken, requestLeave, decideLeave, pendingLeaves, adminInbox, returnBoard, proposeBoard as propose2 } from '../src/lib/repo';
 import { parseSession, sessionCookie, meCookie, parseMe } from '../src/lib/auth';
 import { CAN } from '../src/lib/rules';
 
@@ -351,5 +351,48 @@ describe('계정과 근무자 로그인', () => {
     expect(d.messages[0].channel).toBe('앱·문자');
     expect(d.week.max).toBe(52);
     expect(Array.isArray(d.attendance)).toBe(true);
+  });
+});
+
+describe('휴가 신청과 반려', () => {
+  it('근무자가 연차를 신청하면 알림함에 쌓이고, 승인하면 그날 표에서 자리를 비우고 요청이 나간다', () => {
+    const db = memDb();
+    // 10-21 주간 A조 박현주 S-3. B조 김순자에게 경험을 심어 후보가 되게 한다.
+    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (3,'2026-10-14','주간',2,'확정')").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (3,36,2,'이력')").run();
+    const r = requestLeave(1, '2026-10-21', '주간', '연차', '병원', db);
+    expect(r.ok).toBe(true);
+    expect(requestLeave(1, '2026-10-21', '주간', '반차', null, db).ok).toBe(false); // 중복
+    expect(pendingLeaves(db).map((l) => l.name)).toEqual(['박현주']);
+    expect(adminInbox(db).events.some((e) => e.kind === '휴가신청' && e.text.includes('박현주'))).toBe(true);
+    const d = decideLeave(r.id!, true, '확인', '팀장', db);
+    expect(d.ok).toBe(true); expect(d.sent).toBe(1);
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    expect(b.assignments.some((a) => a.person_id === 1)).toBe(false);
+    expect(b.attendance.map((a) => [a.name, a.kind])).toEqual([['박현주', '연차']]);
+    expect(b.requests.filter((x) => x.status === '발송').map((x) => x.name)).toEqual(['김순자']);
+    const me = myWork(ensureToken(1, db), db)!;
+    expect(me.leaves[0].status).toBe('승인');
+    expect(me.messages[0].body).toContain('휴가 승인');
+    expect(decideLeave(r.id!, false, null, '팀장', db).ok).toBe(false); // 이미 처리
+  });
+  it('거절하면 표는 그대로이고 근무자에게 거절 알림이 간다', () => {
+    const db = memDb();
+    const r = requestLeave(1, '2026-10-21', '주간', '병가', null, db);
+    expect(decideLeave(r.id!, false, '인원이 없습니다', '팀장', db).ok).toBe(true);
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    expect(b.assignments.some((a) => a.person_id === 1)).toBe(true);
+    expect(b.attendance).toHaveLength(0);
+    expect(myWork(ensureToken(1, db), db)!.messages[0].body).toContain('인원이 없습니다');
+  });
+  it('팀장이 입안을 반려하면 초안으로 돌아가고 사유가 남는다', () => {
+    const db = memDb();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    propose2(b.id, db);
+    returnBoard(b.id, 'S-3 인원 확인', db);
+    const after = getBoard('2026-10-21', '주간', 2, db);
+    expect(after.status).toBe('초안'); expect(after.return_note).toBe('S-3 인원 확인');
+    propose2(b.id, db);
+    expect(getBoard('2026-10-21', '주간', 2, db).return_note).toBeNull();
   });
 });

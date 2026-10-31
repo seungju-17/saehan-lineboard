@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS people (
 CREATE INDEX IF NOT EXISTS idx_people_name ON people(name);
 CREATE TABLE IF NOT EXISTS boards (
   id INTEGER PRIMARY KEY, date TEXT NOT NULL, shift TEXT NOT NULL CHECK (shift IN ('주간','야간')), factory_id INTEGER NOT NULL REFERENCES factories(id),
-  status TEXT NOT NULL DEFAULT '초안' CHECK (status IN ('초안','입안','확정')), confirmed_at TEXT, copied_from TEXT, note TEXT, UNIQUE (date, shift, factory_id));
+  status TEXT NOT NULL DEFAULT '초안' CHECK (status IN ('초안','입안','확정')), confirmed_at TEXT, copied_from TEXT, note TEXT, return_note TEXT, UNIQUE (date, shift, factory_id));
 CREATE TABLE IF NOT EXISTS board_posts (
   board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id),
   product TEXT, vacant INTEGER DEFAULT 0, stopped INTEGER DEFAULT 0, need INTEGER, PRIMARY KEY (board_id, post_id));
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS requests (
   sent_at TEXT DEFAULT (datetime('now','localtime')), expires_at TEXT, responded_at TEXT);
 CREATE INDEX IF NOT EXISTS idx_req_board ON requests(board_id, post_id);
 CREATE TABLE IF NOT EXISTS messages (
-  id INTEGER PRIMARY KEY, person_id INTEGER NOT NULL REFERENCES people(id), kind TEXT NOT NULL CHECK (kind IN ('배치','변경','요청')),
+  id INTEGER PRIMARY KEY, person_id INTEGER NOT NULL REFERENCES people(id), kind TEXT NOT NULL CHECK (kind IN ('배치','변경','요청','근태')),
   body TEXT NOT NULL, link TEXT, channel TEXT NOT NULL DEFAULT '데모', sent_at TEXT DEFAULT (datetime('now','localtime')), read_at TEXT);
 CREATE INDEX IF NOT EXISTS idx_msg_person ON messages(person_id, sent_at);
 CREATE TABLE IF NOT EXISTS attendance (
@@ -45,6 +45,10 @@ CREATE TABLE IF NOT EXISTS attendance (
   UNIQUE (date, shift, person_id));
 CREATE INDEX IF NOT EXISTS idx_att_person ON attendance(person_id, date);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS leave_requests (
+  id INTEGER PRIMARY KEY, person_id INTEGER NOT NULL REFERENCES people(id), date TEXT NOT NULL, shift TEXT NOT NULL CHECK (shift IN ('주간','야간')),
+  kind TEXT NOT NULL CHECK (kind IN ('연차','반차','병가')), note TEXT, status TEXT NOT NULL DEFAULT '신청' CHECK (status IN ('신청','승인','거절')),
+  reply TEXT, decided_by TEXT, created_at TEXT DEFAULT (datetime('now','localtime')), decided_at TEXT);
 CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL CHECK (role IN ('팀장','담당자','반장')), factory_id INTEGER, password_hash TEXT NOT NULL, active INTEGER DEFAULT 1);
 `;
 
@@ -60,6 +64,11 @@ export function openDb(file: string): DB {
   // 예전 파일에 없는 열 보태기
   const cols = (d.prepare('PRAGMA table_info(board_posts)').all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes('need')) d.exec('ALTER TABLE board_posts ADD COLUMN need INTEGER');
+  const bcols = (d.prepare('PRAGMA table_info(boards)').all() as { name: string }[]).map((c) => c.name);
+  if (!bcols.includes('return_note')) d.exec('ALTER TABLE boards ADD COLUMN return_note TEXT');
+  // messages.kind 제약에 '근태'가 없는 옛 파일은 표를 다시 만든다
+  const msgSql = (d.prepare("SELECT sql FROM sqlite_master WHERE name='messages'").get() as { sql: string } | undefined)?.sql ?? '';
+  if (msgSql && !msgSql.includes("'근태'")) d.exec("ALTER TABLE messages RENAME TO messages_old; CREATE TABLE messages (id INTEGER PRIMARY KEY, person_id INTEGER NOT NULL REFERENCES people(id), kind TEXT NOT NULL CHECK (kind IN ('배치','변경','요청','근태')), body TEXT NOT NULL, link TEXT, channel TEXT NOT NULL DEFAULT '데모', sent_at TEXT DEFAULT (datetime('now','localtime')), read_at TEXT); INSERT INTO messages SELECT * FROM messages_old; DROP TABLE messages_old; CREATE INDEX IF NOT EXISTS idx_msg_person ON messages(person_id, sent_at);");
   return d;
 }
 export function getDb(): DB {

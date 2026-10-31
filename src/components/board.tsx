@@ -169,6 +169,11 @@ export function Board(): React.ReactElement {
           {!locked && <button onClick={autofill} disabled={busy} className="h-11 px-4 rounded-md border border-brand/30 bg-white text-[15px] font-semibold text-brand hover:border-brand hover:bg-brand-soft disabled:opacity-40">자동 채우기</button>}
           {locked
             ? (mayDecide && <button onClick={() => act({ action: 'unconfirm' })} disabled={busy} className="h-11 px-4 rounded-md border border-line bg-white text-[15px] font-medium hover:border-ink-3">{twoStep ? '결정 해제' : '확정 해제'}</button>)
+            : twoStep && board?.status === '입안' && mayDecide
+            ? <span className="flex items-center gap-2">
+                <button onClick={async () => { const note = window.prompt('반려 사유를 적어 주세요 (작성자에게 보입니다)') ?? null; if (note === null) return; const d = await act({ action: 'return', note }); if (d) setFlash('반려했습니다. 작성자가 고쳐서 다시 입안합니다.'); }} disabled={busy} className="h-11 px-5 rounded-md bg-vac-bg text-vac text-[15px] font-semibold hover:brightness-95 disabled:opacity-40">반려</button>
+                <button onClick={confirm} disabled={busy || total === 0} className="h-11 px-6 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">결정</button>
+              </span>
             : twoStep && board?.status === '초안'
             ? <button onClick={() => act({ action: 'propose' }).then((d) => d && setFlash('입안했습니다. 팀장 결정을 기다립니다.'))} disabled={busy || total === 0} className="h-11 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">입안</button>
             : mayDecide
@@ -242,7 +247,7 @@ export function Board(): React.ReactElement {
                           <span key={a.id} className="relative">
                             <button data-chip="person" disabled={locked} onClick={() => setPop({ kind: 'person', postId: p.id, personId: a.person_id })}
                               className={`h-8 pl-2.5 pr-3 rounded-md text-sm font-medium disabled:cursor-default border-l-4 hover:brightness-95 ${a.source === '자동' ? 'border-dashed' : ''}`}
-                              style={{ background: a.source === '대체' ? '#e8f5ee' : groupColor(a.grp, a.work_type).bg, color: a.source === '대체' ? '#1d7a4a' : '#1c2230', borderLeftColor: a.source === '대체' ? '#1d7a4a' : groupColor(a.grp, a.work_type).ink }}
+                              style={{ background: a.source === '대체' ? '#e8f5ee' : groupColor(a.grp, a.work_type).bg, color: a.source === '대체' ? '#2a9d6f' : '#1c2230', borderLeftColor: a.source === '대체' ? '#2a9d6f' : groupColor(a.grp, a.work_type).ink }}
                               title={`${groupColor(a.grp, a.work_type).label || a.grp}${a.source === '대체' ? ' · 대체 투입' : a.source === '자동' ? ' · 자동 채우기' : ''}`}>
                               {a.name}{away ? <span className="ml-1 text-[11px] font-normal text-ink-3">{a.home_factory_id}공장</span> : null}{att && <span className="ml-1 text-[11px] font-semibold text-vac">{att.kind}</span>}
                             </button>
@@ -322,6 +327,7 @@ export function Board(): React.ReactElement {
               : <button disabled={locked} onClick={() => setNoteEdit(true)} className={`flex-1 text-left h-8 -mx-2 px-2 rounded-md hover:bg-ground disabled:cursor-default ${board.note ? 'text-ink' : 'text-ink-3'}`}>{board.note ?? '검수 강화, 결원 대응 같은 그날의 특이 사항'}</button>}
           </div>
         )}
+        {board?.return_note && board.status === '초안' && <div className="px-5 py-2.5 border-t border-line-2 text-[14px] bg-vac-bg text-vac"><b>반려됨</b> · {board.return_note} <span className="text-ink-2">— 고친 뒤 다시 입안하세요.</span></div>}
         {board?.copied_from && board.status === '초안' && board.assignments.every((a) => a.source === '복사') && (
           <div className="px-5 py-3 border-t border-line-2 text-[13px] text-ink-3">{board.copied_from} 표를 복사했습니다. 바뀐 곳만 고치고 {twoStep ? '입안' : '확정'}하세요.</div>
         )}

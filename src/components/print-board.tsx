@@ -38,10 +38,10 @@ export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: 
               <td className="border border-ink h-12 w-16" />
               <td className="border border-ink h-12 w-16 align-bottom text-ink-2">{b.status !== '초안' ? '입안' : ''}</td>
               <td className="border border-ink h-12 w-16" />
-              <td className="border border-ink h-12 w-16 align-bottom font-bold" style={{ color: '#1d7a4a' }}>{b.status === '확정' ? '결정' : ''}</td>
+              <td className="border border-ink h-12 w-16 align-bottom font-bold" style={{ color: '#2a9d6f' }}>{b.status === '확정' ? '결정' : ''}</td>
             </tr></tbody>
           </table>
-        ) : (b.status === '확정' && <span className="inline-flex items-center h-7 px-2.5 rounded font-bold text-white" style={{ background: '#1d7a4a' }}>확정</span>)}
+        ) : (b.status === '확정' && <span className="inline-flex items-center h-7 px-2.5 rounded font-bold text-white" style={{ background: '#2a9d6f' }}>확정</span>)}
         {action}
       </div>
       <table className="w-full text-[15px] border-collapse border-2 border-ink">
@@ -64,7 +64,7 @@ export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: 
                     <td className={`py-1.5 align-middle ${p.stopped ? 'line-through text-ink-3' : 'font-medium'}`}>{p.product ?? ''}</td>
                     <td className="py-1 align-middle">
                       <span className="inline-flex flex-wrap gap-1">
-                        {ppl.map((a) => { const gc = a.source === '대체' ? { ink: '#1d7a4a', bg: '#e8f5ee' } : groupColor(a.grp, a.work_type); const k = att.find((t) => t.person_id === a.person_id); return (
+                        {ppl.map((a) => { const gc = a.source === '대체' ? { ink: '#2a9d6f', bg: '#e8f5ee' } : groupColor(a.grp, a.work_type); const k = att.find((t) => t.person_id === a.person_id); return (
                           <span key={a.id} className="inline-flex items-center h-6 pl-1.5 pr-2 rounded-sm font-semibold border-l-4" style={{ background: gc.bg, borderLeftColor: gc.ink }}>{a.name}{a.home_factory_id && a.home_factory_id !== b.factory_id ? <span className="ml-1 text-[11px] font-normal text-ink-3">{a.home_factory_id}공장</span> : null}{k ? <span className="ml-1 text-[11px]" style={{ color: '#c8362b' }}>{k.kind}</span> : null}</span>
                         ); })}
                         {vacant && <span className="inline-flex items-center h-6 px-2 rounded-sm font-bold text-white" style={{ background: '#c8362b' }}>비어 있음{need > 1 ? ` ${ppl.length}/${need}` : ''}</span>}
@@ -86,7 +86,7 @@ export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: 
           {(['A', 'B', 'C'] as const).map((x) => <span key={x} className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: groupColor(x).ink }} />{x}조</span>)}
           <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: groupColor(null, '주간고정').ink }} />주간고정</span>
           <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: groupColor(null, '임시').ink }} />임시</span>
-          <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: '#1d7a4a' }} />대체 투입</span>
+          <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: '#2a9d6f' }} />대체 투입</span>
         </div>
       </div>
     </div>

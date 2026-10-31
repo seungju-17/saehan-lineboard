@@ -1,7 +1,8 @@
 /* 브라우저 판: /api/* 호출을 서버 없이 repo 함수로 바로 연결한다. src/app/api/* 와 같은 동작. */
 import { getDb } from './db-shim';
-import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, monthSummary, myWork, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
+import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, monthSummary, myWork, adminInbox, decideLeave, requestLeave, returnBoard, weekHoursFor, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
 import { currentShiftSeoul, todaySeoul, type Shift } from '../src/lib/shift';
+import type { LeaveKind } from '../src/lib/rules';
 import { getStats } from '../src/lib/stats';
 import { ask, makeClient, explainApiError, type ChatMessage } from '../src/lib/assistant';
 
@@ -36,6 +37,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
         case 'note': setNote(board.id, (body.note as string | null) ?? null); break;
         case 'attend': extra = setAttendance(board.id, body.postId ? postId : null, personId, (body.kind as AttendanceKind | null) ?? null, (body.note as string | null) ?? null, undefined, typeof body.request === 'boolean' ? body.request : undefined); break;
         case 'propose': proposeBoard(board.id); break;
+        case 'return': returnBoard(board.id, (body.note as string | null) ?? null); break;
         case 'autofill': extra = autoFill(board.id); break;
         case 'confirm': extra = confirmBoard(board.id); break;
         case 'unconfirm': unconfirmBoard(board.id); break;
@@ -56,9 +58,15 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
       catch (e) { const x = explainApiError(e); if (x.badKey) { try { localStorage.removeItem('lb_api_key'); } catch { /* 저장소 없음 */ } } return json({ error: x.badKey ? 'no_key' : 'api', message: x.message }, x.badKey ? 503 : 502); }
     }
     if (path === '/api/requests') return json(allRequests());
+    if (path === '/api/leaves') {
+      if (method === 'GET') return json(adminInbox());
+      let who = '관리자'; try { const r = localStorage.getItem('lb_role'); if (r) who = (JSON.parse(r) as { name: string }).name; } catch { /* 저장소 없음 */ }
+      const r = decideLeave(Number(body.id), !!body.approve, (body.reply as string | null) ?? null, who);
+      return json(r, r.ok ? 200 : 409);
+    }
     if (path === '/api/settings') { if (method === 'GET') return json(getSettings()); try { return json(setSettings(body as Partial<Settings>)); } catch (e) { return json({ error: (e as Error).message }, 400); } }
     if (path === '/api/people') {
-      if (method === 'GET') return json(people(getDb(), false));
+      if (method === 'GET') { const h = weekHoursFor(todaySeoul()); return json(people(getDb(), false).map((p) => ({ ...p, week_hours: h.get(p.id) ?? 0 }))); }
       const { id, ...u2 } = body as { id: number } & Record<string, unknown>;
       const allowed = ['phone', 'grp', 'work_type', 'affiliation', 'active', 'home_factory_id', 'unit', 'gender'];
       const sets = allowed.filter((k) => k in u2);
@@ -99,6 +107,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
       let me = ''; try { me = localStorage.getItem('lb_me') ?? ''; } catch { /* 저장소 없음 */ }
       const tok = (method === 'GET' ? u.searchParams.get('token') : (body.token as string | undefined)) || me;
       if (method === 'GET') { const d = myWork(tok); return d ? json(d) : json({ error: '로그인이 필요합니다' }, 401); }
+      if (body.action === 'leave') { const p = personByToken(tok); if (!p) return json({ error: '로그인이 필요합니다' }, 401); const r = requestLeave(p.id, String(body.date ?? ''), body.shift as Shift, body.kind as LeaveKind, (body.note as string | null) ?? null); return json(r, r.ok ? 200 : 409); }
       return json({ ok: markRead(tok, Number(body.messageId)) });
     }
     return json({ error: 'not found' }, 404);
