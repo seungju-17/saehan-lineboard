@@ -13,7 +13,7 @@ type Data = {
   week: { from: string; to: string; shifts: number; hours: number; max: number };
   attendance: { date: string; shift: string; kind: string; note: string | null }[];
   leaves: { id: number; date: string; shift: string; kind: string; note: string | null; status: string; reply: string | null }[];
-  workDays: { date: string; shift: string }[];
+  workDays: { date: string; shift: string; factory: string; post: string }[];
   error?: string;
 };
 type Tab = 'work' | 'requests' | 'attendance' | 'inbox';
@@ -68,7 +68,10 @@ export function MyWork({ token }: { token?: string }): React.ReactElement {
   const first = `${mon}-01`; const dow = new Date(first + 'T00:00:00Z').getUTCDay(); const start = addDays(first, -dow);
   const cells = Array.from({ length: 42 }, (_, i) => addDays(start, i));
   const attBy = new Map(d.attendance.map((a) => [a.date, a]));
-  const workBy = new Set(d.workDays.map((w) => w.date));
+  const workBy = new Map(d.workDays.map((w) => [w.date, w]));
+  const monthWork = d.workDays.filter((w) => w.date.startsWith(mon));
+  const monthDay = monthWork.filter((w) => w.shift === '주간').length, monthNight = monthWork.length - monthDay;
+  const recentAtt = d.attendance.filter((a) => a.date >= addDays(d.today, -62));
   const leaveBy = new Map(d.leaves.filter((l) => l.status !== '거절').map((l) => [l.date, l]));
   const shiftMonth = (n: number): void => { const dt = new Date(Date.UTC(y, m - 1 + n, 1)); setMonth(dt.toISOString().slice(0, 7)); };
   return (
@@ -153,31 +156,31 @@ export function MyWork({ token }: { token?: string }): React.ReactElement {
           <section className="rounded-xl border border-line bg-white p-3">
             <div className="flex items-center justify-between mb-2">
               <button onClick={() => shiftMonth(-1)} aria-label="지난달" className="h-8 w-8 rounded-md hover:bg-ground text-ink-2">‹</button>
-              <div className="font-bold">{y}년 {m}월 근태</div>
+              <div className="text-center"><div className="font-bold">{y}년 {m}월 근태</div><div className="text-[11px] text-ink-3">근무 {monthWork.length}일 · 주간 {monthDay} · 야간 {monthNight}</div></div>
               <button onClick={() => shiftMonth(1)} aria-label="다음달" className="h-8 w-8 rounded-md hover:bg-ground text-ink-2">›</button>
             </div>
             <div className="grid grid-cols-7 text-center text-[11px] text-ink-3 mb-1">{W.map((w, i) => <div key={w} className={i === 0 ? 'text-vac' : i === 6 ? 'text-brand' : ''}>{w}</div>)}</div>
             <div className="grid grid-cols-7 gap-1">
               {cells.map((c) => {
-                const inM = c.startsWith(mon); const a = attBy.get(c); const l = leaveBy.get(c); const worked = workBy.has(c);
+                const inM = c.startsWith(mon); const a = attBy.get(c); const l = leaveBy.get(c); const worked = workBy.get(c);
                 const col = a ? ATT[a.kind] ?? ATT['교육'] : l ? (l.status === '승인' ? ATT[l.kind] : { ink: '#d97f1f', bg: '#fdf0e0' }) : null;
                 return (
-                  <div key={c} title={a ? `${a.kind}${a.note ? ' · ' + a.note : ''}` : l ? `${l.kind} ${l.status}` : worked ? '근무' : undefined}
+                  <div key={c} title={a ? `${a.kind}${a.note ? ' · ' + a.note : ''}` : l ? `${l.kind} ${l.status}` : worked ? `${worked.shift} · ${worked.factory} ${worked.post}` : undefined}
                     className={`h-11 rounded-md text-[12px] flex flex-col items-center justify-center ${inM ? '' : 'opacity-25'} ${c === d.today ? 'ring-1 ring-brand' : ''}`} style={col ? { background: col.bg, color: col.ink, fontWeight: 700 } : worked ? { background: '#eef2f8' } : undefined}>
-                    <span>{+c.slice(8, 10)}</span>{col && <span className="text-[9px] leading-3">{a ? a.kind : l!.status === '승인' ? l!.kind : '신청'}</span>}
+                    <span>{+c.slice(8, 10)}</span>{col ? <span className="text-[9px] leading-3">{a ? a.kind : l!.status === '승인' ? l!.kind : '신청'}</span> : worked && <span className="text-[9px] leading-3 text-ink-3">{worked.shift === '주간' ? '주' : '야'}</span>}
                   </div>
                 );
               })}
             </div>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink-3">
-              <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: '#eef2f8', border: '1px solid #e5eaf3' }} />근무</span>
+              <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: '#eef2f8', border: '1px solid #e5eaf3' }} />근무 (주 · 야)</span>
               {Object.entries(ATT).filter(([k]) => ['결근', '지각', '연차', '병가'].includes(k)).map(([k, c]) => <span key={k} className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: c.ink }} />{k}</span>)}
               <span>주황 「신청」은 승인 대기</span>
             </div>
           </section>
-          {d.attendance.length === 0 ? <p className="text-ink-3 text-sm text-center">최근 두 달 근태 기록이 없습니다.</p> : (
+          {recentAtt.length === 0 ? <p className="text-ink-3 text-sm text-center">최근 두 달 근태 기록이 없습니다.</p> : (
             <ul className="divide-y divide-line">
-              {d.attendance.map((a, i) => <li key={i} className="py-2.5 flex items-center gap-3"><span className="w-24 shrink-0 text-[15px]">{fmtShort(a.date)} {a.shift}</span><Chip kind={a.kind} />{a.note && <span className="text-sm text-ink-3">{a.note}</span>}</li>)}
+              {recentAtt.map((a, i) => <li key={i} className="py-2.5 flex items-center gap-3"><span className="w-24 shrink-0 text-[15px]">{fmtShort(a.date)} {a.shift}</span><Chip kind={a.kind} />{a.note && <span className="text-sm text-ink-3">{a.note}</span>}</li>)}
             </ul>
           )}
           <p className="text-xs text-ink-3">기록이 다르면 담당자에게 말씀해 주세요. 월 근태표는 이 기록으로 만듭니다.</p>
