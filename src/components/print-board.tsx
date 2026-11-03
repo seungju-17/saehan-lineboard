@@ -13,17 +13,16 @@ export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: 
   const twoStep = b.factory_id === 2;
   const att = b.attendance;
   const groups: { name: string; posts: Board['posts'] }[] = [];
+  // 엑셀 양식처럼 모든 라인을 인쇄한다. 안 돌리는 라인은 빈 줄로 낮게.
   for (const p of b.posts) {
-    const show = (byPost.get(p.id)?.length ?? 0) > 0 || p.product || p.unmanned || p.stopped || isVacantPost(p, 0);
-    if (!show) continue;
     const last = groups[groups.length - 1];
     if (last && last.name === (p.zone || '라인')) last.posts.push(p); else groups.push({ name: p.zone || '라인', posts: [p] });
   }
   const running = b.posts.filter((p) => p.kind === 'machine' && !p.unmanned && !p.stopped && (p.product || (byPost.get(p.id)?.length ?? 0) > 0)).length;
   const vacantCount = b.posts.filter((p) => isVacantPost(p, byPost.get(p.id)?.length ?? 0)).length;
   return (
-    <div className="mx-auto max-w-3xl print:max-w-none bg-white border border-line rounded-xl p-6 print:border-0 print:p-0 print:rounded-none text-ink">
-      <div className="flex items-start justify-between gap-4 mb-3">
+    <div className="lb-print mx-auto max-w-3xl print:max-w-none bg-white border border-line rounded-xl p-6 print:border-0 print:p-0 print:rounded-none text-ink">
+      <div className="lb-print-head flex items-start justify-between gap-4 mb-3">
         <div>
           <img src={LOGO} alt="새한프라텍" className="h-5 w-auto mb-2" />
           <div className="text-[26px] font-extrabold leading-tight">{factoryName} 인원 배치표</div>
@@ -58,14 +57,15 @@ export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: 
                 const ppl = byPost.get(p.id) ?? [];
                 const vacant = isVacantPost(p, ppl.length);
                 const need = needFor(p, ppl.length);
+                const idle = p.kind === 'machine' && !p.unmanned && !p.stopped && !p.product && ppl.length === 0 && !vacant;
                 return (
-                  <tr key={p.id} className="border-t border-line" style={vacant ? { background: '#fdecec' } : p.stopped ? { background: '#f1f3f6' } : p.kind !== 'machine' ? { background: '#f8f9fb' } : undefined}>
-                    <td className="py-1.5 pl-2 align-middle">
+                  <tr key={p.id} className={`border-t border-line ${idle ? 'text-ink-3' : ''}`} style={vacant ? { background: '#fdecec' } : p.stopped ? { background: '#f1f3f6' } : p.kind !== 'machine' ? { background: '#f8f9fb' } : undefined}>
+                    <td className={`${idle ? 'py-0.5' : 'py-1.5'} pl-2 align-middle`}>
                       <span className="inline-flex items-center gap-1.5"><i className="w-1.5 h-5 rounded-sm" style={{ background: vacant ? '#c8362b' : p.stopped ? '#c9cfd8' : zc.ink }} /><b className="text-[17px]" style={{ color: vacant ? '#c8362b' : p.stopped ? '#667085' : zc.ink }}>{p.code}</b></span>
                       {p.stopped ? <span className="ml-1.5 text-[12px] font-semibold text-ink-2">부동</span> : null}{p.unmanned ? <span className="ml-1.5 text-[12px] text-ink-3">무인</span> : null}
                     </td>
-                    <td className={`py-1.5 align-middle ${p.stopped ? 'line-through text-ink-3' : 'font-medium'}`}>{p.product ?? ''}</td>
-                    <td className="py-1 align-middle">
+                    <td className={`${idle ? 'py-0.5' : 'py-1.5'} align-middle ${p.stopped ? 'line-through text-ink-3' : 'font-medium'}`}>{p.product ?? (idle ? '—' : '')}</td>
+                    <td className={`${idle ? 'py-0.5' : 'py-1'} align-middle`}>
                       <span className="inline-flex flex-wrap gap-1">
                         {ppl.map((a) => { const gc = a.source === '대체' ? { ink: '#2a9d6f', bg: '#e1f4ec' } : groupColor(a.grp, a.work_type); const k = att.find((t) => t.person_id === a.person_id); return (
                           <span key={a.id} className="inline-flex items-center h-6 pl-1.5 pr-2 rounded-sm font-semibold border-l-4" style={{ background: gc.bg, borderLeftColor: gc.ink }}>{a.name}{a.home_factory_id && a.home_factory_id !== b.factory_id ? <span className="ml-1 text-[11px] font-normal text-ink-3">{a.home_factory_id}공장</span> : null}{k ? <span className="ml-1 text-[11px]" style={{ color: '#c8362b' }}>{k.kind}</span> : null}</span>
@@ -82,10 +82,10 @@ export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: 
           );
         })}
       </table>
-      <div className="mt-3 text-[14px] flex flex-col gap-1">
+      <div className="lb-print-foot mt-3 text-[14px] flex flex-col gap-1">
         <div><span className="font-semibold mr-2">비고</span>{b.note ?? ''}</div>
         {att.length > 0 && <div><span className="font-semibold mr-2">근태</span>{att.map((a) => <span key={a.person_id} className="mr-2">{a.name} <b style={{ color: '#c8362b' }}>{a.kind}</b>{a.note ? <span className="text-ink-3"> {a.note}</span> : null}</span>)}</div>}
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-ink-2">
+        <div className="lb-print-legend mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-ink-2">
           {(['A', 'B', 'C'] as const).map((x) => <span key={x} className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: groupColor(x).ink }} />{x}조</span>)}
           <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: groupColor(null, '주간고정').ink }} />주간고정</span>
           <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: groupColor(null, '임시').ink }} />임시</span>
