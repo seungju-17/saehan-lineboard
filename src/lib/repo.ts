@@ -528,7 +528,7 @@ export function myWork(tok: string, db: DB = getDb()) {
     assignments: rows.map((r) => ({ ...r, factory: facs.get(r.factory_id) ?? '' })),
     messages,
     openRequests: open.map((r) => ({ ...r, factory: facs.get(r.factory_id) ?? '' })),
-    week: { from: w.from, to: w.to, shifts: weekShifts, hours: weekShifts * st.shift_hours, max: st.week_max_hours },
+    week: { from: w.from, to: w.to, shifts: weekShifts, hours: weekShifts * st.shift_hours, max: st.week_max_hours, shiftHours: st.shift_hours },
     attendance, leaves, workDays,
   };
 }

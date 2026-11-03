@@ -10,7 +10,7 @@ type Data = {
   assignments: { date: string; shift: string; status: string; factory: string; post: string; product: string | null }[];
   messages: { id: number; kind: string; body: string; link: string | null; channel: string; sent_at: string; read_at: string | null }[];
   openRequests: { token: string; expires_at: string | null; date: string; shift: string; factory: string; post: string; product: string | null }[];
-  week: { from: string; to: string; shifts: number; hours: number; max: number };
+  week: { from: string; to: string; shifts: number; hours: number; max: number; shiftHours: number };
   attendance: { date: string; shift: string; kind: string; note: string | null }[];
   leaves: { id: number; date: string; shift: string; kind: string; note: string | null; status: string; reply: string | null }[];
   workDays: { date: string; shift: string; factory: string; post: string }[];
@@ -72,6 +72,11 @@ export function MyWork({ token }: { token?: string }): React.ReactElement {
   const monthWork = d.workDays.filter((w) => w.date.startsWith(mon));
   const monthDay = monthWork.filter((w) => w.shift === '주간').length, monthNight = monthWork.length - monthDay;
   const recentAtt = d.attendance.filter((a) => a.date >= addDays(d.today, -62));
+  // 달별 근무 시간: 주간·야간 교대 수 × 한 교대 시간. 기록이 있는 달만, 최근 달부터.
+  const byMonth = new Map<string, { day: number; night: number }>();
+  for (const w of d.workDays) { const k = w.date.slice(0, 7); const v = byMonth.get(k) ?? { day: 0, night: 0 }; if (w.shift === '주간') v.day++; else v.night++; byMonth.set(k, v); }
+  const months = [...byMonth.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 12);
+  const sh = d.week.shiftHours;
   const leaveBy = new Map(d.leaves.filter((l) => l.status !== '거절').map((l) => [l.date, l]));
   const shiftMonth = (n: number): void => { const dt = new Date(Date.UTC(y, m - 1 + n, 1)); setMonth(dt.toISOString().slice(0, 7)); };
   return (
@@ -178,6 +183,25 @@ export function MyWork({ token }: { token?: string }): React.ReactElement {
               <span>주황 「신청」은 승인 대기</span>
             </div>
           </section>
+          {months.length > 0 && (
+            <section className="rounded-xl border border-line bg-white p-3">
+              <div className="flex items-baseline justify-between mb-2"><div className="font-bold">달별 근무 시간</div><div className="text-[11px] text-ink-3">한 교대 {sh}시간 기준</div></div>
+              <table className="w-full text-[14px] tabular-nums">
+                <thead><tr className="text-[11px] text-ink-3"><th className="text-left font-medium py-1">달</th><th className="text-right font-medium py-1">주간</th><th className="text-right font-medium py-1">야간</th><th className="text-right font-medium py-1">합계</th></tr></thead>
+                <tbody>
+                  {months.map(([k, v]) => (
+                    <tr key={k} className={`border-t border-line-2 ${k === mon ? 'font-semibold' : ''}`}>
+                      <td className="py-1.5"><button onClick={() => setMonth(k)} className="hover:text-brand">{+k.slice(0, 4)}년 {+k.slice(5, 7)}월</button></td>
+                      <td className="py-1.5 text-right">{v.day * sh}시간 <span className="text-ink-3 text-[12px]">({v.day}일)</span></td>
+                      <td className="py-1.5 text-right">{v.night * sh}시간 <span className="text-ink-3 text-[12px]">({v.night}일)</span></td>
+                      <td className="py-1.5 text-right font-semibold">{(v.day + v.night) * sh}시간</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-2 text-[11px] text-ink-3">배치표에 들어간 날을 센 것입니다. 달을 누르면 위 달력이 그달로 넘어갑니다.</p>
+            </section>
+          )}
           {recentAtt.length === 0 ? <p className="text-ink-3 text-sm text-center">최근 두 달 근태 기록이 없습니다.</p> : (
             <ul className="divide-y divide-line">
               {recentAtt.map((a, i) => <li key={i} className="py-2.5 flex items-center gap-3"><span className="w-24 shrink-0 text-[15px]">{fmtShort(a.date)} {a.shift}</span><Chip kind={a.kind} />{a.note && <span className="text-sm text-ink-3">{a.note}</span>}</li>)}
