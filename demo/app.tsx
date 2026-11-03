@@ -17,7 +17,6 @@ import { refreshSession } from '../src/lib/use-session';
 import { setAsk } from '../src/lib/ask';
 import { getDb } from './db-shim';
 import { usePathname, navigate } from './next-shim';
-import { filterByName } from '../src/lib/hangul';
 
 export let printParams = new URLSearchParams();
 export function setPrintParams(p: URLSearchParams): void { printParams = p; }
@@ -28,9 +27,10 @@ function DemoLogin(): React.ReactElement {
   const ppl = people(getDb(), true).filter((p) => p.phone).slice(0, 400);
   const [pick, setPick] = useState('');
   const [q, setQ] = useState('');
-  const shown = useMemo(() => filterByName(ppl, q, (p) => p.name), [ppl, q]);
-  // 쳐서 좁힌 목록에 고른 사람이 없으면 맨 앞 사람을 고른다
-  const picked = shown.some((p) => String(p.id) === pick) ? pick : (q.trim() && shown[0] ? String(shown[0].id) : '');
+  // 이름을 끝까지 정확히 쳤을 때만 그 사람으로 본다 (띄어쓰기만 무시)
+  const norm = (x: string) => x.replace(/\s+/g, '');
+  const typed = q.trim() ? ppl.find((p) => norm(p.name) === norm(q)) : undefined;
+  const picked = pick || (typed ? String(typed.id) : '');
   async function asAdmin(username: string): Promise<void> {
     await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) });
     await refreshSession(); navigate('/today');
@@ -50,12 +50,15 @@ function DemoLogin(): React.ReactElement {
       </section>
       <section className="bg-white border border-line rounded-xl p-5 flex flex-col gap-3">
         <h2 className="text-[15px] font-semibold">근무자</h2>
-        <input value={q} onChange={(e) => { setQ(e.target.value); setPick(''); }} onKeyDown={(e) => { if (e.key === 'Enter' && picked) void asWorker(); }} aria-label="이름 입력" placeholder="이름 입력 · ㄱ만 쳐도 ㄱ으로 시작하는 이름이 나옵니다" className="h-11 rounded-md border border-line px-3 text-[15px] bg-white" />
+        <div className="flex flex-col gap-1">
+          <input value={q} onChange={(e) => { setQ(e.target.value); setPick(''); }} onKeyDown={(e) => { if (e.key === 'Enter' && picked) void asWorker(); }} aria-label="이름 입력" placeholder="이름을 정확히 입력 (예: 김명희)" className="h-11 rounded-md border border-line px-3 text-[15px] bg-white" />
+          {q.trim() ? <p className="text-xs" style={typed ? { color: '#2a9d6f' } : undefined}>{typed ? `${typed.name} · ${typed.work_type === '임시' ? '임시' : typed.grp + '조'} · Enter로 들어가기` : <span className="text-ink-3">이름이 끝까지 정확히 맞아야 합니다. 아니면 아래 목록에서 고르세요.</span>}</p> : null}
+        </div>
         <div className="flex gap-2">
-          <select value={picked} onChange={(e) => setPick(e.target.value)} aria-label="근무자 고르기" className="h-11 flex-1 min-w-0 rounded-md border border-line px-3 text-[15px] bg-white"><option value="">{q.trim() ? (shown.length ? `${shown.length}명 · 고르세요` : '맞는 이름이 없습니다') : '이름을 고르세요'}</option>{shown.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.work_type === '임시' ? '임시' : p.grp + '조'} · {p.phone}</option>)}</select>
+          <select value={picked} onChange={(e) => { setPick(e.target.value); setQ(''); }} aria-label="근무자 고르기" className="h-11 flex-1 min-w-0 rounded-md border border-line px-3 text-[15px] bg-white"><option value="">이름을 고르세요</option>{ppl.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.work_type === '임시' ? '임시' : p.grp + '조'} · {p.phone}</option>)}</select>
           <button onClick={asWorker} disabled={!picked} className="h-11 px-4 rounded-md bg-brand text-white font-semibold disabled:opacity-40">폰 화면으로</button>
         </div>
-        <p className="text-xs text-ink-3">이름을 치거나 목록에서 고른 뒤 Enter 또는 「폰 화면으로」. 근무자는 폰에서 전화번호를 넣고 문자로 온 인증번호로 한 번 들어오면 그 뒤로는 유지됩니다.</p>
+        <p className="text-xs text-ink-3">이름을 정확히 치거나 목록에서 고른 뒤 Enter 또는 「폰 화면으로」. 근무자는 폰에서 전화번호를 넣고 문자로 온 인증번호로 한 번 들어오면 그 뒤로는 유지됩니다.</p>
       </section>
     </div>
   );
