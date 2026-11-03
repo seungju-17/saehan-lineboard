@@ -94,6 +94,17 @@ describe('빈 자리 판정', () => {
     expect(isVacantPost(s3, cnt)).toBe(false);
     if (cnt === 0) expect(s3.product).toBeNull();
   });
+  it('사람은 같은 조 표에서 왔는데 최근 표에 그 라인 제품이 없으면, 사람을 데려온 표의 제품을 쓴다', () => {
+    const db = memDb();
+    // 2026-10-20(A조 주간) S-3 박현주·신광야950. 10-24(B조 주간)는 S-3를 안 돌려 제품 없음. 11-02는 A조 주간 → 사람은 10-20, 제품은 최근(10-24)에서 오는데 거기엔 없다.
+    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (2,'2026-10-24','주간',2,'확정')").run();
+    db.prepare("INSERT INTO board_posts (board_id, post_id, product) VALUES (2,29,'진로4.0')").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (2,44,3,'이력')").run();
+    const b = getBoard('2026-11-02', '주간', 2, db);
+    const s3 = b.posts.find((p) => p.code === 'S-3')!;
+    expect(b.assignments.some((a) => a.post_id === 36)).toBe(true);
+    expect(s3.product).toBe('신광야950');
+  });
   it('안 돌린 라인(사람 없음·부동)의 제품은 다음 표로 복사되지 않고, 무인 라인 제품은 복사된다', () => {
     const db = memDb();
     db.prepare("INSERT INTO board_posts (board_id, post_id, product, stopped) VALUES (1,44,NULL,0)").run();

@@ -75,6 +75,11 @@ export function ensureBoard(date: string, shift: Shift, factoryId: number, db: D
     // 사람이 복사되지 않은 유인 라인은 오늘 안 돌리는 것으로 보고 제품도 비운다 (제품은 최근 표, 사람은 같은 조 표에서 오므로 어긋날 수 있다)
     db.prepare(`UPDATE board_posts SET product=NULL, need=NULL WHERE board_id=? AND post_id IN (SELECT po.id FROM posts po WHERE po.kind='machine' AND po.unmanned=0)
       AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id)`).run(id);
+    // 반대로 사람은 왔는데 최근 표에 제품이 없던 라인은 사람을 데려온 표(같은 조 표)의 제품을 쓴다. 사람만 있고 제품이 빈 줄이 생기지 않게.
+    db.prepare(`INSERT OR IGNORE INTO board_posts (board_id, post_id) SELECT DISTINCT ?, post_id FROM assignments WHERE board_id=?`).run(id, id);
+    db.prepare(`UPDATE board_posts SET product=(SELECT s.product FROM board_posts s WHERE s.board_id=? AND s.post_id=board_posts.post_id AND COALESCE(s.stopped,0)=0)
+      WHERE board_id=? AND (product IS NULL OR product='') AND post_id IN (SELECT po.id FROM posts po WHERE po.kind='machine' AND po.unmanned=0)
+      AND EXISTS (SELECT 1 FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id)`).run(src.id, id);
     // 필요 인원 = 복사돼 들어온 인원
     db.prepare('INSERT OR IGNORE INTO board_posts (board_id, post_id) SELECT DISTINCT ?, post_id FROM assignments WHERE board_id=?').run(id, id);
     db.prepare('UPDATE board_posts SET need=COALESCE(NULLIF((SELECT COUNT(*) FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id), 0), need) WHERE board_id=?').run(id);
