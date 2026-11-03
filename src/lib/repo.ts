@@ -96,7 +96,8 @@ export function monthSummary(month: string, shift: Shift, factoryId: number, db:
     const bp = new Map((db.prepare('SELECT post_id, product, vacant, stopped, need FROM board_posts WHERE board_id=?').all(b.id) as { post_id: number; product: string | null; vacant: number; stopped: number; need: number | null }[]).map((r) => [r.post_id, r]));
     const cnt = new Map<number, number>();
     let workers = 0;
-    for (const r of db.prepare('SELECT post_id FROM assignments WHERE board_id=?').all(b.id) as { post_id: number }[]) { cnt.set(r.post_id, (cnt.get(r.post_id) ?? 0) + 1); workers++; }
+    const seen = new Set<number>();
+    for (const r of db.prepare('SELECT post_id, person_id FROM assignments WHERE board_id=?').all(b.id) as { post_id: number; person_id: number }[]) { cnt.set(r.post_id, (cnt.get(r.post_id) ?? 0) + 1); if (!seen.has(r.person_id)) { seen.add(r.person_id); workers++; } }
     const vacant = ps.filter((p) => { const x = bp.get(p.id); return isVacantPost({ kind: p.kind, unmanned: p.unmanned, product: x?.product ?? null, vacant: x?.vacant ?? 0, stopped: x?.stopped ?? 0, need: x?.need ?? null }, cnt.get(p.id) ?? 0); }).length;
     return { date: b.date, status: b.status, vacant, workers };
   });

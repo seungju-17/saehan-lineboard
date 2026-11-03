@@ -8,7 +8,8 @@ import { LOGO } from '@/lib/logo';
 export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: string; action?: React.ReactNode }): React.ReactElement {
   const byPost = new Map<number, Board['assignments']>();
   for (const a of b.assignments) byPost.set(a.post_id, [...(byPost.get(a.post_id) ?? []), a]);
-  const men = b.assignments.filter((a) => a.gender === 'M').length, women = b.assignments.filter((a) => a.gender === 'F').length;
+  const persons = [...new Map(b.assignments.map((a) => [a.person_id, a])).values()]; // 여러 라인을 같이 보는 사람은 한 번만
+  const men = persons.filter((a) => a.gender === 'M').length, women = persons.filter((a) => a.gender === 'F').length;
   const twoStep = b.factory_id === 2;
   const att = b.attendance;
   const groups: { name: string; posts: Board['posts'] }[] = [];
@@ -28,7 +29,7 @@ export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: 
           <div className="text-[26px] font-extrabold leading-tight">{factoryName} 인원 배치표</div>
           <div className="mt-1 text-[17px] font-semibold">{fmtKo(b.date)} · {b.shift} <span className="font-normal text-ink-2">{SHIFT_HOURS[b.shift]}</span></div>
           <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[14px]">
-            <span>근무 <b>{b.assignments.length}</b>명 <span className="text-ink-2">(남 {men} · 여 {women})</span></span>
+            <span>근무 <b>{persons.length}</b>명 <span className="text-ink-2">(남 {men} · 여 {women})</span></span>
             <span>가동 <b>{running}</b>라인</span>
             {vacantCount > 0 && <span className="font-bold" style={{ color: '#c8362b' }}>비어 있음 {vacantCount}</span>}
           </div>

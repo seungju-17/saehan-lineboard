@@ -22,8 +22,11 @@ function snapshot(boardId: number, factoryId: number, db: DB): Snap {
   const bp = new Map((db.prepare('SELECT post_id, product, vacant, stopped, need FROM board_posts WHERE board_id=?').all(boardId) as { post_id: number; product: string | null; vacant: number; stopped: number; need: number | null }[]).map((r) => [r.post_id, r]));
   const cnt = new Map<number, number>();
   let temps = 0, workers = 0;
-  for (const r of db.prepare('SELECT a.post_id, p.work_type FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=?').all(boardId) as { post_id: number; work_type: string }[]) {
-    cnt.set(r.post_id, (cnt.get(r.post_id) ?? 0) + 1); workers++; if (r.work_type === '임시') temps++;
+  const seen = new Set<number>(); // 여러 라인을 같이 보는 사람은 한 명으로 센다
+  for (const r of db.prepare('SELECT a.post_id, a.person_id, p.work_type FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=?').all(boardId) as { post_id: number; person_id: number; work_type: string }[]) {
+    cnt.set(r.post_id, (cnt.get(r.post_id) ?? 0) + 1);
+    if (seen.has(r.person_id)) continue;
+    seen.add(r.person_id); workers++; if (r.work_type === '임시') temps++;
   }
   let lines = 0, vacant = 0;
   for (const p of ps) {

@@ -79,9 +79,11 @@ export function Board(): React.ReactElement {
   }, [board]);
   const attByPerson = useMemo(() => new Map((board?.attendance ?? []).map((a) => [a.person_id, a])), [board]);
   const isVacant = (p: PostT): boolean => isVacantPost(p, byPost.get(p.id)?.length ?? 0);
-  const total = board?.assignments.length ?? 0;
-  const men = board?.assignments.filter((a) => a.gender === 'M').length ?? 0;
-  const women = board?.assignments.filter((a) => a.gender === 'F').length ?? 0;
+  // 한 사람이 여러 라인을 같이 볼 수 있으니 인원은 사람 수로 센다
+  const persons = useMemo(() => { const m = new Map<number, BoardT['assignments'][number]>(); for (const a of board?.assignments ?? []) if (!m.has(a.person_id)) m.set(a.person_id, a); return [...m.values()]; }, [board]);
+  const total = persons.length;
+  const men = persons.filter((a) => a.gender === 'M').length;
+  const women = persons.filter((a) => a.gender === 'F').length;
   const vacantCount = board?.posts.filter(isVacant).length ?? 0;
   const waiting = board?.requests.filter((r) => r.status === '발송').length ?? 0;
   const runningLines = board?.posts.filter((p) => p.kind === 'machine' && !p.unmanned && !p.stopped && (p.product || (byPost.get(p.id)?.length ?? 0) > 0)).length ?? 0;

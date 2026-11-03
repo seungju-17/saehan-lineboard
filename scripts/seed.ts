@@ -110,6 +110,8 @@ const P_PRODUCTS: Record<string, string> = { 'P-1': '진로4.0', 'P-2': '테일�
 const insP = db.prepare('INSERT INTO board_posts (board_id, post_id, product) VALUES (?,?,?) ON CONFLICT(board_id, post_id) DO UPDATE SET product=COALESCE(board_posts.product, excluded.product)');
 for (const b of db.prepare('SELECT id FROM boards WHERE factory_id=2').all() as { id: number }[]) for (const [code, prod] of Object.entries(P_PRODUCTS)) insP.run(b.id, postId.get(`2|${code}`)!, prod);
 const stat = db.prepare('SELECT (SELECT COUNT(*) FROM people) p, (SELECT COUNT(*) FROM boards) b, (SELECT COUNT(*) FROM assignments) a, (SELECT MAX(date) FROM boards) d').get();
+// 이력 표는 결원 판정 대상이 아니다: 필요 인원을 실제 들어간 인원으로 맞춰 「비어 있음」이 뜨지 않게 한다
+db.prepare('UPDATE board_posts SET need=(SELECT COUNT(DISTINCT a.person_id) FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id)').run();
 console.log('seeded', DB_FILE, stat, 'temps', temps, 'roster new/upd', rosterNew, rosterUpd, 'cutoff', CUTOFF);
 
 // 체험용 전화번호와 기본 관리자 계정. 실제 번호는 직원 화면에서 넣는다.
