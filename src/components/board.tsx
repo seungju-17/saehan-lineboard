@@ -20,6 +20,8 @@ export function Board(): React.ReactElement {
   const [pop, setPop] = useState<Popover>(null);
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+  const [reverted, setReverted] = useState(false); // 입안된 표를 고쳐 초안으로 돌아왔음
+  const [noCand, setNoCand] = useState<Record<number, boolean>>({}); // 마지막 요청에서 보낼 후보가 없었던 자리
   const [editing, setEditing] = useState<number | null>(null);
   const [needEdit, setNeedEdit] = useState<number | null>(null);
   const [cal, setCal] = useState(false);
@@ -29,21 +31,20 @@ export function Board(): React.ReactElement {
   const popRef = useRef<HTMLDivElement>(null);
 
   const q = useMemo(() => `date=${date}&shift=${shift}&factory=${factory}`, [date, shift, factory]);
-  // 주소에 날짜·근무·공장을 남겨 링크로 공유할 수 있게 한다 (브라우저 판은 해시 주소라 제외)
+  // 주소에 날짜·근무·공장을 남겨 링크로 공유할 수 있게 한다. 브라우저 판(해시 주소)도 ?date=…&shift=…&factory=… 를 읽고, 해시는 그대로 둔다.
   useEffect(() => {
-    if (window.location.hash) return;
     const sp = new URLSearchParams(window.location.search);
     const d = sp.get('date'), sh = sp.get('shift'), f = Number(sp.get('factory'));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 첫 진입 때 주소의 값을 반영
     if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) setDate(d); if (sh === '주간' || sh === '야간') setShift(sh); if (f === 1 || f === 2) setFactory(f);
   }, []);
-  useEffect(() => { if (!window.location.hash) window.history.replaceState(null, '', `?${q}`); }, [q]);
+  useEffect(() => { window.history.replaceState(null, '', `?${q}${window.location.hash}`); }, [q]);
 
   const load = useCallback(async (): Promise<void> => {
     const r = await fetch(`/api/board?${q}`); if (r.ok) setBoard(await r.json());
   }, [q]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- 조회 결과 반영
-  useEffect(() => { load(); setPop(null); setNoteEdit(false); }, [load]);
+  useEffect(() => { load(); setPop(null); setNoteEdit(false); setReverted(false); setNoCand({}); }, [load]);
   useEffect(() => { if (!flash) return; const t = setTimeout(() => setFlash(null), flash.length > 40 ? 5000 : 2500); return () => clearTimeout(t); }, [flash]);
   // 요청을 보낸 뒤 자동으로 열리는 말풍선이 화면 밖이면 보이게 끌어온다
   useEffect(() => { if (pop?.kind === 'vacancy') popRef.current?.scrollIntoView({ block: 'nearest' }); }, [pop]);
@@ -60,6 +61,7 @@ export function Board(): React.ReactElement {
       const r = await fetch('/api/board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, shift, factory, ...body }) });
       const data = await r.json();
       if (!r.ok) { setFlash(data.error ?? '실패'); return null; }
+      if ((data as { reverted?: boolean }).reverted) setReverted(true);
       setBoard(data); return data;
     } finally { setBusy(false); }
   }
@@ -97,8 +99,11 @@ export function Board(): React.ReactElement {
   async function autofill(): Promise<void> {
     const d = await act({ action: 'autofill' });
     if (!d) return;
-    const r = (d as BoardT & { filled: number; lines: number; need: number });
-    setFlash(r.filled === 0 ? (r.need === 0 ? '채울 자리가 없습니다' : '넣을 수 있는 사람이 없습니다') : `${r.lines}개 라인에 ${r.filled}명을 넣었습니다. 확인 후 확정하세요.`);
+    const r = (d as BoardT & { filled: number; lines: number; need: number; short?: { code: string; missing: number }[] });
+    const left = (r.short ?? []).map((x) => `${x.code} ${x.missing}명`).join(', ');
+    setFlash(r.filled === 0
+      ? (r.need === 0 ? '채울 자리가 없습니다' : `넣을 수 있는 사람이 없습니다 · 못 채운 라인: ${left}. 「+」로 직접 넣으세요.`)
+      : `${r.lines}개 라인에 ${r.filled}명을 넣었습니다.${left ? ` 못 채운 라인: ${left}. 「+」로 직접 넣으세요.` : ' 확인 후 확정하세요.'}`);
   }
   async function confirm(): Promise<void> {
     if (!(await ask(`${total}명에게 알림을 보냅니다.`))) return;
@@ -109,7 +114,8 @@ export function Board(): React.ReactElement {
   function afterSend(p: PostT, d: BoardT, prefix = ''): void {
     const r = d as BoardT & SendResult;
     const names = (r.candidates ?? []).map((c) => c.name);
-    if (names.length === 0) { setFlash(`${prefix}보낼 후보가 없습니다`); setPop({ kind: 'vacancy', postId: p.id }); return; }
+    if (names.length === 0) { setNoCand((m) => ({ ...m, [p.id]: true })); setFlash(`${prefix}${p.code} 보낼 후보가 없습니다. 직접 넣어 주세요.`); setPop({ kind: 'vacancy', postId: p.id }); return; }
+    setNoCand((m) => ({ ...m, [p.id]: false }));
     setFlash(`${prefix}${names.join(' · ')}에게 요청`);
     setPop({ kind: 'vacancy', postId: p.id });
   }
@@ -175,7 +181,7 @@ export function Board(): React.ReactElement {
                 <button onClick={confirm} disabled={busy || total === 0} className="h-11 px-6 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">결정</button>
               </span>
             : twoStep && board?.status === '초안'
-            ? <button onClick={() => act({ action: 'propose' }).then((d) => d && setFlash('입안했습니다. 팀장 결정을 기다립니다.'))} disabled={busy || total === 0} className="h-11 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">입안</button>
+            ? <button onClick={() => act({ action: 'propose' }).then((d) => { if (d) { setReverted(false); setFlash('입안했습니다. 팀장 결정을 기다립니다.'); } })} disabled={busy || total === 0} className="h-11 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">입안</button>
             : mayDecide
             ? <button onClick={confirm} disabled={busy || total === 0} className="h-11 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">{twoStep ? '결정' : '확정'}</button>
             : <span className="h-11 px-4 inline-flex items-center rounded-md bg-chip text-[14px] text-ink-2">{twoStep ? '팀장이 결정합니다' : '팀장·담당자가 확정합니다'}</span>}
@@ -274,12 +280,14 @@ export function Board(): React.ReactElement {
                             </button>
                             {pop?.kind === 'vacancy' && pop.postId === p.id && (
                               <Pop ref={popRef}>
-                                {reqs.length === 0 && <div className="px-3 h-8 flex items-center text-sm text-ink-2">아직 요청 전</div>}
+                                {reqs.length === 0 && !noCand[p.id] && <div className="px-3 h-8 flex items-center text-sm text-ink-2">아직 요청 전</div>}
+                                {noCand[p.id] && <div className="px-3 py-2 text-sm text-vac leading-snug"><b>후보 없음</b><br /><span className="text-ink-2">{open > 0 ? `더 보낼 사람이 없습니다. 대기 중인 ${open}명의 답을 기다리거나 직접 넣으세요.` : '오늘 쉬는 조에 이 공장 경험자가 더 없습니다.'}</span></div>}
                                 {reqs.map((r) => (
                                   <div key={r.id} className="px-3 h-8 text-sm flex items-center gap-2"><span className="font-medium w-14 shrink-0 truncate">{r.name}</span><StatusTag status={r.status} />
                                     {r.status === '발송' && <button onClick={() => act({ action: 'cancel_requests', postId: p.id, requestId: r.id }).then((d) => d && setFlash(`${r.name} 요청 취소`))} className="h-6 px-2 rounded text-[12px] font-semibold text-vac border border-vac/40 hover:bg-vac-bg shrink-0">취소</button>}</div>
                                 ))}
-                                {reqs.length === 0 && <div className="border-t border-line-2 mt-0.5 pt-0.5"><PopBtn compact onClick={async () => { setPop(null); const d = await act({ action: 'send', postId: p.id }); if (d) afterSend(p, d); }}>후보에게 요청</PopBtn></div>}
+                                {reqs.length === 0 && !noCand[p.id] && <div className="border-t border-line-2 mt-0.5 pt-0.5"><PopBtn compact onClick={async () => { setPop(null); const d = await act({ action: 'send', postId: p.id }); if (d) afterSend(p, d); }}>후보에게 요청</PopBtn></div>}
+                                {noCand[p.id] && !locked && !unmanned && <div className="border-t border-line-2 mt-0.5 pt-0.5"><PopBtn compact onClick={() => { setPop({ kind: 'add', postId: p.id }); setQuery(''); }}>직접 넣기 (이름 검색)</PopBtn></div>}
                               </Pop>
                             )}
                           </span>
@@ -328,6 +336,7 @@ export function Board(): React.ReactElement {
           </div>
         )}
         {board?.return_note && board.status === '초안' && <div className="px-5 py-2.5 border-t border-line-2 text-[14px] bg-vac-bg text-vac"><b>반려됨</b> · {board.return_note} <span className="text-ink-2">— 고친 뒤 다시 입안하세요.</span></div>}
+        {reverted && board?.status === '초안' && <div className="px-5 py-2.5 border-t border-line-2 text-[14px] bg-wait-bg text-wait"><b>입안 취소됨</b> <span className="text-ink-2">— 입안한 뒤 표를 고쳐서 초안으로 돌아왔습니다. 다시 입안하세요.</span></div>}
         {board?.copied_from && board.status === '초안' && board.assignments.every((a) => a.source === '복사') && (
           <div className="px-5 py-3 border-t border-line-2 text-[13px] text-ink-3">{board.copied_from} 표를 복사했습니다. 바뀐 곳만 고치고 {twoStep ? '입안' : '확정'}하세요.</div>
         )}

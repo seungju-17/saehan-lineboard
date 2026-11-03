@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { type AttendanceKind, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, monthSummary, nextCandidates, removePerson, returnBoard, sendRequests, setProduct, unconfirmBoard, autoFill, setNeed } from '@/lib/repo';
+import { type AttendanceKind, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, monthSummary, nextCandidates, removePerson, returnBoard, sendRequests, setProduct, unconfirmBoard, autoFill, setNeed, revertProposal, EDIT_ACTIONS } from '@/lib/repo';
 import type { Shift } from '@/lib/shift';
 
 type Key = { date: string; shift: Shift; factory: number };
@@ -44,13 +44,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const board = getBoard(k.date, k.shift, k.factory);
   let extra: Record<string, unknown> = {};
   try {
+    // 입안된 표의 배치 내용을 고치면 초안으로 돌아간다 (다시 입안해야 결재가 이어진다)
+    if (EDIT_ACTIONS.has(body.action) && revertProposal(board.id, body.action)) extra = { reverted: true };
     switch (body.action) {
       case 'product': setProduct(board.id, body.postId, body.product); break;
       case 'add': {
         const id = body.personId ?? findOrCreatePerson(body.name ?? '', k.factory).id;
         addPerson(board.id, body.postId, id); break;
       }
-      case 'remove': extra = removePerson(board.id, body.postId, body.personId, false); break;
+      case 'remove': extra = { ...extra, ...removePerson(board.id, body.postId, body.personId, false) }; break;
       case 'absent': removePerson(board.id, body.postId, body.personId, true); extra = sendRequests(board.id, body.postId, body.personId); break;
       case 'send': extra = sendRequests(board.id, body.postId, null); break;
       case 'next': extra = nextCandidates(board.id, body.postId); break;
@@ -62,7 +64,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       case 'attend': extra = setAttendance(board.id, body.postId ?? null, body.personId, body.kind ?? null, body.note ?? null, undefined, typeof body.request === 'boolean' ? body.request : undefined); break;
       case 'propose': proposeBoard(board.id); break;
       case 'return': returnBoard(board.id, body.note ?? null); break;
-      case 'autofill': extra = autoFill(board.id); break;
+      case 'autofill': extra = { ...extra, ...autoFill(board.id) }; break;
       case 'confirm': extra = confirmBoard(board.id); break;
       case 'unconfirm': unconfirmBoard(board.id); break;
       default: return NextResponse.json({ error: 'unknown action' }, { status: 400 });

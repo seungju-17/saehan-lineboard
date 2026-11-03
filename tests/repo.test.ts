@@ -3,6 +3,7 @@ import { openDb } from '../src/lib/db';
 import { addPerson, removePerson, cancelRequests, getSettings, setSettings, weekHoursFor, needFor, setNeed, setProduct, clearVacancy, ensureBoard, getBoard, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
 import { periodFor } from '../src/lib/attendance-xlsx';
 import { loginAccount, personByPhone, myWork, ensureToken, requestLeave, decideLeave, pendingLeaves, adminInbox, returnBoard, proposeBoard as propose2 } from '../src/lib/repo';
+import { autoFill, revertProposal, EDIT_ACTIONS } from '../src/lib/repo';
 import { parseSession, sessionCookie, meCookie, parseMe } from '../src/lib/auth';
 import { CAN } from '../src/lib/rules';
 
@@ -394,5 +395,29 @@ describe('휴가 신청과 반려', () => {
     expect(after.status).toBe('초안'); expect(after.return_note).toBe('S-3 인원 확인');
     propose2(b.id, db);
     expect(getBoard('2026-10-21', '주간', 2, db).return_note).toBeNull();
+  });
+});
+
+describe('자동 채우기와 입안 되돌리기', () => {
+  it('자동 채우기는 못 채운 라인을 결과에 남긴다', () => {
+    const db = memDb();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    // S-3 필요 인원을 3명으로 올리면 후보가 모자라 못 채운 만큼 short에 남는다
+    setNeed(b.id, 36, 3, db);
+    const r = autoFill(b.id, db);
+    expect(r.need).toBe(2);
+    expect(r.filled + (r.short.find((x) => x.code === 'S-3')?.missing ?? 0)).toBe(2);
+    expect(r.short.length > 0 || r.filled === 2).toBe(true);
+  });
+  it('입안된 표의 배치를 고치면 초안으로 돌아가고, 근태·요청은 입안을 유지한다', () => {
+    const db = memDb();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    proposeBoard(b.id, db);
+    expect(EDIT_ACTIONS.has('attend')).toBe(false);
+    expect(EDIT_ACTIONS.has('send')).toBe(false);
+    expect(getBoard('2026-10-21', '주간', 2, db).status).toBe('입안');
+    expect(revertProposal(b.id, 'product', db)).toBe(true);
+    expect(getBoard('2026-10-21', '주간', 2, db).status).toBe('초안');
+    expect(revertProposal(b.id, 'product', db)).toBe(false); // 이미 초안이면 아무것도 안 함
   });
 });

@@ -1,6 +1,6 @@
 /* 브라우저 판: /api/* 호출을 서버 없이 repo 함수로 바로 연결한다. src/app/api/* 와 같은 동작. */
 import { getDb } from './db-shim';
-import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, monthSummary, myWork, adminInbox, decideLeave, requestLeave, returnBoard, weekHoursFor, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard } from '../src/lib/repo';
+import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, monthSummary, myWork, adminInbox, decideLeave, requestLeave, returnBoard, weekHoursFor, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard, revertProposal, EDIT_ACTIONS } from '../src/lib/repo';
 import { currentShiftSeoul, todaySeoul, type Shift } from '../src/lib/shift';
 import type { LeaveKind } from '../src/lib/rules';
 import { getStats } from '../src/lib/stats';
@@ -23,10 +23,11 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
       if (method === 'GET') return json(board);
       let extra: Record<string, unknown> = {};
       const postId = Number(body.postId), personId = Number(body.personId);
+      if (EDIT_ACTIONS.has(String(body.action)) && revertProposal(board.id, String(body.action))) extra = { reverted: true };
       switch (body.action) {
         case 'product': setProduct(board.id, postId, (body.product as string | null) ?? null); break;
         case 'add': addPerson(board.id, postId, body.personId ? personId : findOrCreatePerson(String(body.name ?? ''), factory).id); break;
-        case 'remove': extra = removePerson(board.id, postId, personId, false); break;
+        case 'remove': extra = { ...extra, ...removePerson(board.id, postId, personId, false) }; break;
         case 'absent': removePerson(board.id, postId, personId, true); extra = sendRequests(board.id, postId, personId); break;
         case 'send': extra = sendRequests(board.id, postId, null); break;
         case 'next': extra = nextCandidates(board.id, postId); break;
@@ -38,7 +39,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
         case 'attend': extra = setAttendance(board.id, body.postId ? postId : null, personId, (body.kind as AttendanceKind | null) ?? null, (body.note as string | null) ?? null, undefined, typeof body.request === 'boolean' ? body.request : undefined); break;
         case 'propose': proposeBoard(board.id); break;
         case 'return': returnBoard(board.id, (body.note as string | null) ?? null); break;
-        case 'autofill': extra = autoFill(board.id); break;
+        case 'autofill': extra = { ...extra, ...autoFill(board.id) }; break;
         case 'confirm': extra = confirmBoard(board.id); break;
         case 'unconfirm': unconfirmBoard(board.id); break;
         default: return json({ error: 'unknown action' }, 400);

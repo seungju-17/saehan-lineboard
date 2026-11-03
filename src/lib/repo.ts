@@ -425,17 +425,19 @@ export function respond(tok: string, action: 'accept' | 'decline', db: DB = getD
 }
 
 /** 자동 채우기: 제품이 적힌 라인마다 과거 표의 보통 인원만큼, 후보 순위대로 채운다. 이미 있는 사람은 그대로 둔다. */
-export function autoFill(boardId: number, db: DB = getDb()): { filled: number; lines: number; need: number } {
+export type AutoFillResult = { filled: number; lines: number; need: number; short: { code: string; missing: number }[] };
+export function autoFill(boardId: number, db: DB = getDb()): AutoFillResult {
   const b = db.prepare('SELECT date, shift, factory_id, status FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift; factory_id: number; status: string };
-  if (b.status === '확정') return { filled: 0, lines: 0, need: 0 };
-  const targets = db.prepare(`SELECT bp.post_id, bp.product, bp.need FROM board_posts bp JOIN posts po ON po.id=bp.post_id
-    WHERE bp.board_id=? AND po.kind='machine' AND po.unmanned=0 AND COALESCE(bp.stopped,0)=0 AND bp.product IS NOT NULL AND bp.product<>'' ORDER BY po.sort`).all(boardId) as { post_id: number; product: string; need: number | null }[];
+  if (b.status === '확정') return { filled: 0, lines: 0, need: 0, short: [] };
+  const targets = db.prepare(`SELECT bp.post_id, po.code, bp.product, bp.need FROM board_posts bp JOIN posts po ON po.id=bp.post_id
+    WHERE bp.board_id=? AND po.kind='machine' AND po.unmanned=0 AND COALESCE(bp.stopped,0)=0 AND bp.product IS NOT NULL AND bp.product<>'' ORDER BY po.sort`).all(boardId) as { post_id: number; code: string; product: string; need: number | null }[];
   const since = addDays(b.date, -365);
   const histCounts = db.prepare(`SELECT a.post_id, bp.product, COUNT(*) c FROM assignments a JOIN boards bo ON bo.id=a.board_id
     JOIN board_posts bp ON bp.board_id=a.board_id AND bp.post_id=a.post_id WHERE bo.factory_id=? AND bo.date>=? AND bo.date<? GROUP BY a.board_id, a.post_id`).all(b.factory_id, since, b.date) as { post_id: number; product: string | null; c: number }[];
   const ctx = rankContext(b.date, b.shift, b.factory_id, db);
   const taken = new Set<number>();
   let filled = 0, lines = 0, need = 0;
+  const short: { code: string; missing: number }[] = [];
   for (const t of targets) {
     const same = histCounts.filter((h) => h.post_id === t.post_id && h.product === t.product).map((h) => h.c);
     const any = histCounts.filter((h) => h.post_id === t.post_id).map((h) => h.c);
@@ -446,10 +448,22 @@ export function autoFill(boardId: number, db: DB = getDb()): { filled: number; l
     const picks = rankCandidates({ date: b.date, shift: b.shift, postId: t.post_id, product: t.product, ...ctx, excludeIds: taken, limit: want - have });
     if (picks.length) lines++;
     for (const c of picks) { addPerson(boardId, t.post_id, c.personId, '자동', db); taken.add(c.personId); ctx.assignedThatDay.add(c.personId); filled++; }
+    // 못 채운 라인은 결과에 남겨 담당자가 직접 넣게 한다
+    if (picks.length < want - have) short.push({ code: t.code, missing: want - have - picks.length });
   }
-  if (filled) db.prepare("INSERT INTO logs (board_id, action, detail) VALUES (?, '자동채우기', ?)").run(boardId, `${lines}라인 ${filled}명`);
-  return { filled, lines, need };
+  if (filled) db.prepare("INSERT INTO logs (board_id, action, detail) VALUES (?, '자동채우기', ?)").run(boardId, `${lines}라인 ${filled}명${short.length ? ` · 못 채움 ${short.map((x) => `${x.code} ${x.missing}명`).join(', ')}` : ''}`);
+  return { filled, lines, need, short };
 }
+
+/** 입안된 표의 배치 내용을 고치면 결재 대상이 바뀐 것이므로 초안으로 되돌린다. 근태 처리·대체 요청은 당일 일이라 입안을 유지한다. 되돌렸으면 true. */
+export function revertProposal(boardId: number, action: string, db: DB = getDb()): boolean {
+  const r = db.prepare("UPDATE boards SET status='초안' WHERE id=? AND status='입안'").run(boardId);
+  if (r.changes === 0) return false;
+  db.prepare("INSERT INTO logs (board_id, action, detail) VALUES (?, '입안취소', ?)").run(boardId, `${action} 때문에 초안으로`);
+  return true;
+}
+/** 입안을 되돌리는 편집 동작. 근태(attend·absent)와 요청(send·next·cancel·cancel_requests)은 포함하지 않는다. */
+export const EDIT_ACTIONS = new Set(['product', 'add', 'remove', 'need', 'stop', 'note', 'autofill']);
 
 /** 라인 코드로 대체 후보를 본다(봇·검색용). 이미 그날 배치된 사람 제외. */
 export function candidatesFor(date: string, shift: Shift, factoryId: number, postCode: string, limit = 5, db: DB = getDb()): { personId: number; name: string; reasons: string[] }[] {
