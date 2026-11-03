@@ -1,3 +1,4 @@
+import { groupsOn } from '../src/lib/shift';
 import { describe, it, expect } from 'vitest';
 import { openDb } from '../src/lib/db';
 import { ask, runSql, runTool, systemPrompt, tools } from '../src/lib/assistant';
@@ -30,7 +31,7 @@ describe('도구', () => {
     const out = runTool('board', { date: '2026-10-20', shift: '주간', factory: 2 }, db);
     expect(out).toContain('S-3\t신광야950\t박현주');
   });
-  it('groups 도구는 그날 조를 말한다', () => { expect(runTool('groups', { date: '2026-01-01' }, memDb())).toContain('주간 B조'); });
+  it('groups 도구는 그날 조를 말한다', () => { expect(runTool('groups', { date: '2026-01-01' }, memDb())).toContain(`주간 ${groupsOn('2026-01-01').day}조`); });
   it('도구 정의는 모두 strict', () => { for (const t of tools) expect(t.strict).toBe(true); });
   it('시스템 프롬프트에 오늘과 규칙이 있다', () => { const s = systemPrompt({ date: '2026-10-30', shift: '야간' }); expect(s).toContain('2026-10-30'); expect(s).toContain('표를 고치거나'); });
 });

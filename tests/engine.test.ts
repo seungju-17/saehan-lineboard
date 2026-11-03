@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { aggregateExperience, assignmentMessage, availability, rankCandidates, typicalHeadcount, type Person } from '../src/lib/engine';
-import { dayTypeOf, groupsOn, sameGroupBefore } from '../src/lib/shift';
+import { addDays, dayTypeOf, groupsOn, sameGroupBefore, REFERENCE_DATE } from '../src/lib/shift';
 
 const DATE = '2026-10-30';
 const g = groupsOn(DATE);
@@ -43,19 +43,20 @@ describe('집계·문구', () => {
 });
 
 describe('sameGroupBefore', () => {
+  // 기준일(REFERENCE_DATE)부터 4일은 한 조가 주간, 5일째에 다른 조로 바뀐다
+  const R = (n: number): string => addDays(REFERENCE_DATE, n);
   it('조가 바뀐 날은 같은 조가 마지막으로 그 근무를 한 날의 표를 고른다', () => {
-    // 2026-01-05: B조 주간 4일째(01-01~01-04) 다음날 → A조 주간 시작
-    const dates = ['2026-01-04', '2026-01-03', '2026-01-02', '2026-01-01', '2025-12-31', '2025-12-30', '2025-12-29', '2025-12-28', '2025-12-27', '2025-12-26', '2025-12-25', '2025-12-24'];
-    const d = '2026-01-05';
+    const dates = Array.from({ length: 12 }, (_, i) => R(3 - i)); // 최신순: R+3 … R-8
+    const d = R(4);
     const pick = sameGroupBefore(d, '주간', dates)!;
     expect(groupsOn(pick).day).toBe(groupsOn(d).day);
-    expect(pick).not.toBe('2026-01-04');
+    expect(pick).not.toBe(R(3));
   });
   it('같은 조 근무 블록 안에서는 어제 표를 고른다', () => {
-    expect(sameGroupBefore('2026-01-03', '주간', ['2026-01-02', '2026-01-01'])).toBe('2026-01-02');
+    expect(sameGroupBefore(R(2), '주간', [R(1), R(0)])).toBe(R(1));
   });
   it('맞는 날이 없으면 가장 최근 표', () => {
-    expect(sameGroupBefore('2026-01-05', '주간', ['2026-01-04'])).toBe('2026-01-04');
+    expect(sameGroupBefore(R(4), '주간', [R(3)])).toBe(R(3));
   });
 });
 

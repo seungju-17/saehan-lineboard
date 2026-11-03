@@ -1,5 +1,5 @@
 /**
- * 시드: 직원 명단(교수님 데이터 67명) + 2025 실제 배치표(1공장 58일, 2공장 146일)를 +364일 이동해 이력으로 넣는다.
+ * 시드: 직원 명단(교수님 데이터 67명) + 2025 실제 배치표(1공장 8·9·11월, 2공장 8~12월)를 +336일 이동해 이력으로 넣는다.
  * 오늘(한국 시간) 이후는 비워 두어 첫 화면에서 어제 표가 자동 복사되게 한다.
  * 실행: pnpm tsx scripts/seed.ts [cutoff=오늘]
  */
@@ -11,7 +11,8 @@ import { openDb } from '../src/lib/db';
 const ROOT = path.resolve(__dirname, '..');
 const DB_FILE = process.env.LINEBOARD_DB ?? path.join(ROOT, 'data', 'lineboard.db');
 const CUTOFF = process.argv[2] ?? new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-const SHIFT_DAYS = 364;
+// 336일 = 12일 주기 × 28 = 7일 × 48: 옮긴 뒤에도 요일과 근무조 주기가 원래 달력과 같다 (2025-11-30 → 2026-11-01)
+const SHIFT_DAYS = 336;
 
 function csv(file: string): Record<string, string>[] {
   const lines = fs.readFileSync(file, 'utf8').replace(/^﻿/, '').split(/\r?\n/).filter(Boolean);
@@ -57,7 +58,7 @@ for (const r of csv(path.join(ROOT, 'data', 'people_seed.csv'))) {
   personId.set(name, id);
 }
 let rosterNew = 0, rosterUpd = 0;
-for (const r of csv(path.join(ROOT, 'data', 'roster_2025_09.csv'))) {
+for (const r of [...csv(path.join(ROOT, 'data', 'roster_2025_09.csv')), ...csv(path.join(ROOT, 'data', 'roster_2025_11.csv'))]) {
   const name = r['name'].replace(/\s+/g, ''); if (!name) continue;
   const sheet = r['sheet'];
   const unit = sheet.includes('주전반') ? '주전반' : sheet.includes('교대반') ? '교대반' : sheet.includes('PE_') ? 'PE 협력사' : sheet.includes('협력사') ? `협력사 ${r['grp']}조` : '지원';
@@ -74,7 +75,7 @@ const mapF1 = (line: string): string => /^\d\d$/.test(line) || ['B-1', 'B-2', 'P
 const mapF2 = (line: string): string => { const m = line.match(/^([SP])-(\d)/); if (m) return `${m[1]}-${m[2]}`; return ['밴딩,박스,운반', '설비관리', '생산관리'].includes(line) ? line : '기타'; };
 type Row = { fac: number; date: string; shift: string; post: number; product: string | null; name: string };
 const rows: Row[] = [];
-for (const [file, fac, mapper] of [['f1_assignments.csv', 1, mapF1], ['f2_assignments.csv', 2, mapF2]] as const) {
+for (const [file, fac, mapper] of [['f1_assignments.csv', 1, mapF1], ['f1_assignments_2025_11.csv', 1, mapF1], ['f2_assignments.csv', 2, mapF2]] as const) {
   for (const r of csv(path.join(ROOT, 'data', file))) {
     const name = r['name'].replace(/\s+/g, '');
     if (!name || ['가동', '부동', '대기'].includes(name) || name.length > 12) continue;
