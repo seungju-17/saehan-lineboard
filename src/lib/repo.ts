@@ -55,6 +55,7 @@ export function ensureBoard(date: string, shift: Shift, factoryId: number, db: D
   const ex = boardRow(date, shift, factoryId, db);
   if (ex) return ex.id;
   // 최근 표 중 "같은 조가 같은 근무를 한 날"의 표에서 교대 인원을, 가장 최근 표에서 제품·주간고정·임시 인원을 가져온다.
+  // 가장 최근 표 60장을 본다. 자료 공백이 길어도 마지막 표에서 복사한다.
   const all = db.prepare('SELECT id, date FROM boards WHERE shift=? AND factory_id=? AND date<? ORDER BY date DESC LIMIT 60').all(shift, factoryId, date) as { id: number; date: string }[];
   // 휴일(토·일)은 최소 인원으로 돌아가므로 지난 휴일 표를 기준으로 삼는다.
   const wk = isWeekend(date);
@@ -154,7 +155,9 @@ export function weekHoursFor(date: string, db: DB = getDb(), shiftHours = getSet
 /** 후보 계산에 필요한 경험·가용 정보 */
 function rankContext(date: string, shift: Shift, factoryId: number, db: DB) {
   const st = getSettings(db);
-  const since = addDays(date, -180), recentSince = addDays(date, -30);
+  // 경험은 그날 기준 지난 180일. 그 사이에 기록이 없으면(자료 공백·체험판) 가장 최근 기록 180일치를 대신 본다.
+  const lastRec = (db.prepare('SELECT MAX(b.date) d FROM assignments a JOIN boards b ON b.id=a.board_id WHERE b.factory_id=? AND b.date<?').get(factoryId, date) as { d: string | null }).d;
+  const since = lastRec && lastRec < addDays(date, -180) ? addDays(lastRec, -180) : addDays(date, -180), recentSince = addDays(date, -30);
   const hist = db.prepare(`SELECT a.person_id AS personId, a.post_id AS postId, bp.product FROM assignments a JOIN boards b ON b.id=a.board_id
     LEFT JOIN board_posts bp ON bp.board_id=a.board_id AND bp.post_id=a.post_id WHERE b.factory_id=? AND b.date>=? AND b.date<?`).all(factoryId, since, date) as { personId: number; postId: number; product: string | null }[];
   const today = new Set((db.prepare('SELECT a.person_id FROM assignments a JOIN boards b ON b.id=a.board_id WHERE b.date=?').all(date) as { person_id: number }[]).map((r) => r.person_id));

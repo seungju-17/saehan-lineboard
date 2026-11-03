@@ -5,6 +5,7 @@ import { periodFor } from '../src/lib/attendance-xlsx';
 import { loginAccount, personByPhone, myWork, ensureToken, requestLeave, decideLeave, pendingLeaves, adminInbox, returnBoard, proposeBoard as propose2 } from '../src/lib/repo';
 import { autoFill, revertProposal, EDIT_ACTIONS } from '../src/lib/repo';
 import { parseSession, sessionCookie, meCookie, parseMe } from '../src/lib/auth';
+import { addDays, groupsOn } from '../src/lib/shift';
 import { CAN } from '../src/lib/rules';
 
 function memDb() {
@@ -165,6 +166,18 @@ describe('빈 자리 판정', () => {
   });
 });
 
+describe('자료 공백', () => {
+  it('마지막 기록에서 반년 넘게 지난 날에도 「+」 후보와 복사가 나온다', () => {
+    const db = memDb(); // 마지막 기록 2026-10-20. 그보다 앞선 10-08 표에 김순자(B조)의 S-3 경험을 둔다 (복사 원본은 10-20이라 김순자는 복사되지 않는다)
+    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (3,'2026-10-08','주간',2,'확정')").run();
+    db.prepare("INSERT INTO board_posts (board_id, post_id, product) VALUES (3,36,'신광야950')").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (3,36,2,'이력')").run();
+    let d = '2027-09-01'; while (groupsOn(d).off !== 'B') d = addDays(d, 1); // B조가 쉬는 날
+    const b = getBoard(d, '주간', 2, db);
+    expect(b.copied_from).toBe('2026-10-20');
+    expect(Object.values(b.suggestions).some((list) => list.some((x) => x.name === '김순자'))).toBe(true);
+  });
+});
 describe('근태', () => {
   it('결근은 자리를 비우고 요청을 보내며 근태에 남는다', () => {
     const db = memDb();
