@@ -25,14 +25,18 @@ execSync(`npx @tailwindcss/cli -i demo/demo.css -o demo/dist/demo.css --minify`,
 const css = fs.readFileSync(abs('demo/dist/demo.css'), 'utf8');
 const sqljs = fs.readFileSync(abs('node_modules/sql.js/dist/sql-wasm.js'), 'utf8');
 const wasm = fs.readFileSync(abs('node_modules/sql.js/dist/sql-wasm.wasm')).toString('base64');
-const db = fs.readFileSync(process.env.LINEBOARD_DB ?? abs('data/lineboard.db')).toString('base64');
+// 체험판의 「오늘」: 2025년 자료를 날짜 그대로 쓰므로 자료가 끝난 다음 날을 오늘로 본다. 그 이후 표는 넣지 않는다.
+const DEMO_TODAY = process.env.DEMO_TODAY ?? '2025-12-01';
+let dbFile = process.env.LINEBOARD_DB;
+if (!dbFile) { dbFile = abs('demo/dist/demo.db'); execSync(`npx tsx scripts/seed.ts ${DEMO_TODAY}`, { cwd: ROOT, stdio: 'inherit', env: { ...process.env, LINEBOARD_DB: dbFile } }); }
+const db = fs.readFileSync(dbFile).toString('base64');
 
 const html = `<title>새한프라텍 인원 배치</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
 <style>${css}</style>
 <div id="root"></div>
 <script>${sqljs}</script>
-<script>window.__LB_WASM=${JSON.stringify(wasm)};window.__LB_DB=${JSON.stringify(db)};</script>
+<script>window.__LB_WASM=${JSON.stringify(wasm)};window.__LB_DB=${JSON.stringify(db)};window.__LB_TODAY=${JSON.stringify(DEMO_TODAY)};</script>
 <script>${bundle}</script>
 `;
 fs.writeFileSync(out, html);

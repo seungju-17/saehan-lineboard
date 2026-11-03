@@ -1,6 +1,6 @@
 /**
- * 시드: 직원 명단(교수님 데이터 67명) + 2025 실제 배치표(1공장 8·9·11월, 2공장 8~12월)를 +336일 이동해 이력으로 넣는다.
- * 오늘(한국 시간) 이후는 비워 두어 첫 화면에서 어제 표가 자동 복사되게 한다.
+ * 시드: 직원 명단(교수님 데이터 67명) + 2025 실제 배치표(1공장 8·9·11월, 2공장 8~12월)를 날짜 그대로 이력으로 넣는다.
+ * cutoff(기본 오늘, 한국 시간) 이후는 비워 두어 첫 화면에서 직전 표가 자동 복사되게 한다.
  * 실행: pnpm tsx scripts/seed.ts [cutoff=오늘]
  */
 import fs from 'node:fs';
@@ -11,8 +11,8 @@ import { openDb } from '../src/lib/db';
 const ROOT = path.resolve(__dirname, '..');
 const DB_FILE = process.env.LINEBOARD_DB ?? path.join(ROOT, 'data', 'lineboard.db');
 const CUTOFF = process.argv[2] ?? new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-// 336일 = 12일 주기 × 28 = 7일 × 48: 옮긴 뒤에도 요일과 근무조 주기가 원래 달력과 같다 (2025-11-30 → 2026-11-01)
-const SHIFT_DAYS = 336;
+// 날짜는 옮기지 않는다. 2025년 자료는 2025년 날짜 그대로 이력이 된다. (체험판은 build 때 cutoff 2025-12-01 로 따로 시드한다)
+const SHIFT_DAYS = Number(process.env.SEED_SHIFT_DAYS ?? 0);
 
 function csv(file: string): Record<string, string>[] {
   const lines = fs.readFileSync(file, 'utf8').replace(/^﻿/, '').split(/\r?\n/).filter(Boolean);

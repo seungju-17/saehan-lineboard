@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { getDb, type DB } from './db';
-import { addDays, groupsOn, sameGroupBefore, weekRange, type Shift } from './shift';
+import { addDays, groupsOn, sameGroupBefore, weekRange, type Shift, todaySeoul } from './shift';
 import { defaultPassword, hashPassword } from './auth';
 import { aggregateExperience, typicalHeadcount, assignmentMessage, rankCandidates, requestMessage, type Person } from './engine';
 
@@ -503,7 +503,7 @@ export function unconfirmBoard(boardId: number, db: DB = getDb()): void {
 export function myWork(tok: string, db: DB = getDb()) {
   const p = db.prepare('SELECT id, name, affiliation, grp, work_type FROM people WHERE token=?').get(tok) as { id: number; name: string; affiliation: string | null; grp: string; work_type: string } | undefined;
   if (!p) return null;
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+  const today = todaySeoul();
   const rows = db.prepare(`SELECT b.date, b.shift, b.status, b.factory_id, po.name AS post, bp.product FROM assignments a JOIN boards b ON b.id=a.board_id JOIN posts po ON po.id=a.post_id
     LEFT JOIN board_posts bp ON bp.board_id=a.board_id AND bp.post_id=a.post_id WHERE a.person_id=? AND b.date BETWEEN ? AND ? ORDER BY b.date, b.shift`).all(p.id, addDays(today, -1), addDays(today, 6)) as { date: string; shift: Shift; status: string; factory_id: number; post: string; product: string | null }[];
   const messages = db.prepare('SELECT id, kind, body, link, channel, sent_at, read_at FROM messages WHERE person_id=? ORDER BY sent_at DESC LIMIT 30').all(p.id) as { id: number; kind: string; body: string; link: string | null; channel: string; sent_at: string; read_at: string | null }[];

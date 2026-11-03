@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { addDays, groupsOn, type Shift } from '@/lib/shift';
+import { addDays, groupsOn, todaySeoul, type Shift } from '@/lib/shift';
 
 export type MonthMark = { date: string; status: '초안' | '입안' | '확정'; vacant: number; workers: number };
 const W = ['일', '월', '화', '수', '목', '금', '토'];
@@ -23,7 +23,7 @@ export function MonthPicker({ date, shift, factory, onPick, onClose }: { date: s
   const cells = Array.from({ length: 42 }, (_, i) => addDays(start, i));
   const [y, m] = month.split('-').map(Number);
   const shiftMonth = (n: number): void => { const d = new Date(Date.UTC(y, m - 1 + n, 1)); setMonth(d.toISOString().slice(0, 7)); };
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+  const today = todaySeoul();
   return (
     <div role="dialog" aria-label="날짜 고르기" className="absolute z-30 top-11 left-0 w-[340px] bg-white border border-line rounded-xl shadow-[0_12px_32px_rgba(31,95,232,0.14)] p-3">
       {pickMonth ? (

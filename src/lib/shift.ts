@@ -4,7 +4,6 @@ export type DayType = '주' | '야' | '휴';
 
 // 3조 2교대: 주간 4일 → 휴무 2일 → 야간 4일 → 휴무 2일, 12일 주기.
 // 기준일 2025-11-01은 1공장 2025년 11월 배치표에서 확인한 실제 달력이다: 그날 C조 주간(1일째), A조 야간(3일째), B조 휴무(1일째).
-// 체험판 데이터는 이 날짜에서 336일(= 12일 × 28 = 7일 × 48) 옮겨 넣어 조 주기와 요일이 그대로 맞는다.
 const PATTERNS: Record<Group, DayType[]> = {
   A: ['야', '야', '휴', '휴', '주', '주', '주', '주', '휴', '휴', '야', '야'],
   B: ['휴', '휴', '야', '야', '야', '야', '휴', '휴', '주', '주', '주', '주'],
@@ -32,7 +31,12 @@ export function sameGroupBefore(date: string, shift: Shift, dates: string[]): st
 /** 그 날짜가 속한 주의 월요일과 일요일 */
 export function weekRange(date: string): { from: string; to: string } { const dow = (new Date(utc(date)).getUTCDay() + 6) % 7; return { from: addDays(date, -dow), to: addDays(date, 6 - dow) }; }
 export function addDays(date: string, n: number): string { return new Date(utc(date) + n * 86_400_000).toISOString().slice(0, 10); }
-export function todaySeoul(): string { return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }); }
+/** 오늘(한국 시간). 체험판은 __LB_TODAY 로 고정한 날짜를 오늘로 본다 (2025년 자료 그대로 쓰기 위해). */
+export function todaySeoul(): string {
+  const fixed = (globalThis as { __LB_TODAY?: string }).__LB_TODAY;
+  if (fixed && /^\d{4}-\d{2}-\d{2}$/.test(fixed)) return fixed;
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+}
 export function currentShiftSeoul(): Shift {
   const h = +new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Seoul', hour: '2-digit', hour12: false }).slice(0, 2);
   return h >= 6 && h < 18 ? '주간' : '야간';

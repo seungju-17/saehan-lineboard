@@ -141,7 +141,7 @@ export function App(): React.ReactElement {
       <div className="flex-1 lg:flex">
         <Nav />
         <div className="flex-1 min-w-0">
-          <div className="bg-brand-soft text-brand text-[13px]"><div className="px-4 sm:px-6 lg:px-8 py-1.5 flex flex-wrap items-center gap-x-2"><span className="font-semibold">브라우저 안에서 그대로 실행 중</span><span className="text-brand/80">새로고침하면 처음 상태로 돌아갑니다. 「나가기」로 역할을 바꿀 수 있습니다.</span></div></div>
+          <div className="bg-brand-soft text-brand text-[13px]"><div className="px-4 sm:px-6 lg:px-8 py-1.5 flex flex-wrap items-center gap-x-2"><span className="font-semibold">브라우저 안에서 그대로 실행 중</span><span className="text-brand/80">2025년 8~11월 실제 표가 들어 있고 체험판의 「오늘」은 {fmtKo(todaySeoul())}입니다. 새로고침하면 처음 상태로 돌아갑니다. 「나가기」로 역할을 바꿀 수 있습니다.</span></div></div>
           <main className="px-4 sm:px-6 lg:px-8 py-5 sm:py-6 pb-24 max-w-[1280px]">{page}</main>
         </div>
       </div>

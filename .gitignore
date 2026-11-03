@@ -48,3 +48,5 @@ next-env.d.ts
 /demo/dist/
 
 /.taste-skill/
+
+demo/dist/demo.db

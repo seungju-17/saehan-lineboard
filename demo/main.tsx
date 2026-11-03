@@ -4,7 +4,7 @@ import { setDb } from './db-shim';
 import { installFetch } from './api';
 import { navigate } from './next-shim';
 
-declare global { interface Window { initSqlJs: (c: { wasmBinary: Uint8Array }) => Promise<{ Database: new (d: Uint8Array) => unknown }>; __LB_WASM: string; __LB_DB: string } }
+declare global { interface Window { initSqlJs: (c: { wasmBinary: Uint8Array }) => Promise<{ Database: new (d: Uint8Array) => unknown }>; __LB_WASM: string; __LB_DB: string; __LB_TODAY?: string } }
 
 function b64(s: string): Uint8Array { const bin = atob(s); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
 
