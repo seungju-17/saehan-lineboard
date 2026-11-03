@@ -27,7 +27,7 @@ export function Board(): React.ReactElement {
   const [cal, setCal] = useState(false);
   const [noteEdit, setNoteEdit] = useState(false);
   const [query, setQuery] = useState('');
-  const [showIdle, setShowIdle] = useState<Record<string, boolean>>({});
+  const [foldIdle, setFoldIdle] = useState<Record<string, boolean>>({}); // 엑셀처럼 모든 라인을 늘 보여 주고, 원하면 구역별로 쉬는 라인을 접는다
   const popRef = useRef<HTMLDivElement>(null);
 
   const q = useMemo(() => `date=${date}&shift=${shift}&factory=${factory}`, [date, shift, factory]);
@@ -205,12 +205,12 @@ export function Board(): React.ReactElement {
           {groups.map((g) => {
             const isIdle = (p: PostT): boolean => p.kind === 'machine' && !p.unmanned && !p.stopped && !p.product && (byPost.get(p.id)?.length ?? 0) === 0 && !isVacantPost(p, 0);
             const idleCount = g.posts.filter(isIdle).length;
-            const collapse = idleCount > 1 && !showIdle[g.name];
+            const collapse = idleCount > 1 && !!foldIdle[g.name];
             const shown = collapse ? g.posts.filter((p) => !isIdle(p)) : g.posts;
             return (
             <tbody key={g.name}>
               <tr><td colSpan={4} className="pl-4 sm:pl-5 pr-4 pt-3 pb-1.5" style={{ background: zoneColor(g.name).band }}><div className="flex items-center gap-3 text-[13px] font-bold" style={{ color: zoneColor(g.name).ink }}>{g.name}<span className="font-normal text-ink-2">{g.posts.filter((p) => (byPost.get(p.id)?.length ?? 0) > 0).length ? `${g.posts.reduce((n, p) => n + (byPost.get(p.id)?.length ?? 0), 0)}명` : ''}</span>
-                {idleCount > 1 && <button onClick={() => setShowIdle((v) => ({ ...v, [g.name]: !v[g.name] }))} className="font-normal text-ink-3 hover:text-ink underline decoration-line underline-offset-2">{collapse ? `쉬는 라인 ${idleCount}개 보기` : '쉬는 라인 접기'}</button>}
+                {idleCount > 1 && <button onClick={() => setFoldIdle((v) => ({ ...v, [g.name]: !v[g.name] }))} className="font-normal text-ink-3 hover:text-ink underline decoration-line underline-offset-2">{collapse ? `쉬는 라인 ${idleCount}개 보기` : `쉬는 라인 ${idleCount}개 접기`}</button>}
               </div></td></tr>
               {shown.map((p) => {
                 const ppl = byPost.get(p.id) ?? [];
