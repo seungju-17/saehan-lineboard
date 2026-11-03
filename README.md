@@ -18,6 +18,8 @@ Node 20 이상. pnpm이 있으면 `pnpm install / pnpm seed / pnpm dev`도 됩�
 Windows PowerShell에서 `npm`이 보안 정책으로 막히면 `npm.cmd`로 입력하세요.
 외부 서비스·DB 설치 없음 (SQLite 파일 하나).
 
+체험판(docs/index.html)의 「누구로 들어갈까요」에서 근무자는 이름을 쳐서도 들어갑니다. 「ㄱ」만 쳐도 ㄱ으로 시작하는 이름이 목록에 남고, 「김ㅁ」처럼 초성과 글자를 섞어도 됩니다. Enter를 누르면 고른 사람으로 들어갑니다.
+
 ## 화면
 
 | 주소 | 누가 | 내용 |
