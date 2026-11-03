@@ -9,6 +9,9 @@ const W = ['일', '월', '화', '수', '목', '금', '토'];
 export function MonthPicker({ date, shift, factory, onPick, onClose }: { date: string; shift: Shift; factory: number; onPick: (d: string) => void; onClose: () => void }): React.ReactElement {
   const [month, setMonth] = useState(date.slice(0, 7));
   const [marks, setMarks] = useState<Record<string, MonthMark>>({});
+  // 달 이름을 누르면 연도·달 고르기 화면으로 바뀐다
+  const [pickMonth, setPickMonth] = useState(false);
+  const [pickYear, setPickYear] = useState(Number(date.slice(0, 4)));
   useEffect(() => {
     let alive = true;
     fetch(`/api/board?month=${month}&shift=${shift}&factory=${factory}`).then((r) => r.json()).then((j: { dates?: MonthMark[] }) => { if (alive && j.dates) setMarks(Object.fromEntries(j.dates.map((m) => [m.date, m]))); }).catch(() => undefined);
@@ -23,9 +26,33 @@ export function MonthPicker({ date, shift, factory, onPick, onClose }: { date: s
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
   return (
     <div role="dialog" aria-label="날짜 고르기" className="absolute z-30 top-11 left-0 w-[340px] bg-white border border-line rounded-xl shadow-[0_12px_32px_rgba(31,95,232,0.14)] p-3">
+      {pickMonth ? (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <button onClick={() => setPickYear((v) => v - 1)} aria-label="지난해" className="h-8 w-8 rounded-md hover:bg-ground text-ink-2">‹</button>
+            <div className="font-bold text-[15px]">{pickYear}년</div>
+            <button onClick={() => setPickYear((v) => v + 1)} aria-label="다음해" className="h-8 w-8 rounded-md hover:bg-ground text-ink-2">›</button>
+          </div>
+          <div className="grid grid-cols-4 gap-1">
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((mm) => {
+              const key = `${pickYear}-${String(mm).padStart(2, '0')}`;
+              const cur = key === month, thisMonth = key === today.slice(0, 7);
+              return (
+                <button key={mm} onClick={() => { setMonth(key); setPickMonth(false); }}
+                  className={`h-10 rounded-md text-[13px] ${cur ? 'bg-brand text-white font-bold' : 'text-ink hover:bg-ground'} ${thisMonth && !cur ? 'ring-1 ring-brand' : ''}`}>{mm}월</button>
+              );
+            })}
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-ink-3">
+            <span>달을 고르면 그달 달력으로 돌아갑니다</span>
+            <button onClick={() => setPickMonth(false)} className="h-7 px-2 rounded-md border border-line text-ink-2 hover:text-ink">닫기</button>
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="flex items-center justify-between mb-2">
         <button onClick={() => shiftMonth(-1)} aria-label="지난달" className="h-8 w-8 rounded-md hover:bg-ground text-ink-2">‹</button>
-        <div className="font-bold text-[15px]">{y}년 {m}월</div>
+        <button onClick={() => { setPickYear(y); setPickMonth(true); }} aria-label="연도와 달 바꾸기" title="눌러서 연도·달 바꾸기" className="h-8 px-3 rounded-md font-bold text-[15px] hover:bg-ground inline-flex items-center gap-1">{y}년 {m}월<span className="text-ink-3 text-[11px]">▾</span></button>
         <button onClick={() => shiftMonth(1)} aria-label="다음달" className="h-8 w-8 rounded-md hover:bg-ground text-ink-2">›</button>
       </div>
       <div className="grid grid-cols-7 text-center text-[12px] text-ink-3 mb-1">{W.map((w, i) => <div key={w} className={`h-6 leading-6 ${i === 0 ? 'text-vac' : i === 6 ? 'text-brand' : ''}`}>{w}</div>)}</div>
@@ -50,6 +77,8 @@ export function MonthPicker({ date, shift, factory, onPick, onClose }: { date: s
         <span className="inline-flex items-center gap-1"><i className="w-1.5 h-1.5 rounded-full bg-vac" />빈 자리</span>
         <span>작은 글자는 그날 {shift} 근무조</span>
       </div>
+      </>
+      )}
     </div>
   );
 }
