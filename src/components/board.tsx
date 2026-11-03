@@ -27,7 +27,9 @@ export function Board(): React.ReactElement {
   const [cal, setCal] = useState(false);
   const [noteEdit, setNoteEdit] = useState(false);
   const [query, setQuery] = useState('');
-  const [foldIdle, setFoldIdle] = useState<Record<string, boolean>>({}); // 엑셀처럼 모든 라인을 늘 보여 주고, 원하면 구역별로 쉬는 라인을 접는다
+  // 엑셀처럼 모든 라인을 보여 주되, 「쉬는 라인 접기」를 켜면 오늘 안 돌리는 라인은 숨긴다 (브라우저에 기억)
+  const [hideIdle, setHideIdle] = useState<boolean>(() => { try { return localStorage.getItem('lb_hide_idle') === '1'; } catch { return false; } });
+  const toggleIdle = (): void => { setHideIdle((v) => { try { localStorage.setItem('lb_hide_idle', v ? '0' : '1'); } catch { /* 저장 못 해도 동작 */ } return !v; }); };
   const popRef = useRef<HTMLDivElement>(null);
 
   const q = useMemo(() => `date=${date}&shift=${shift}&factory=${factory}`, [date, shift, factory]);
@@ -171,6 +173,7 @@ export function Board(): React.ReactElement {
           <Seg value={String(factory)} options={FACTORIES.map(([id, n]) => [String(id), n])} onChange={(v) => setFactory(Number(v))} />
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2 whitespace-nowrap">
+          <button onClick={toggleIdle} aria-pressed={hideIdle} className={`h-9 px-3 inline-flex items-center rounded-md border text-sm ${hideIdle ? 'border-brand bg-brand-soft text-brand' : 'border-line bg-white text-ink-2 hover:text-ink hover:border-ink-3'}`}>{hideIdle ? '모든 라인 보기' : '쉬는 라인 접기'}</button>
           <a href={`/print?${q}`} target="_blank" className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">인쇄</a>
           <a href={`/api/board/export?${q}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">엑셀</a>
           <a href={`/api/attendance/export?month=${date.slice(0, 7)}&factory=${factory}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">월 근태표</a>
@@ -205,12 +208,12 @@ export function Board(): React.ReactElement {
           {groups.map((g) => {
             const isIdle = (p: PostT): boolean => p.kind === 'machine' && !p.unmanned && !p.stopped && !p.product && (byPost.get(p.id)?.length ?? 0) === 0 && !isVacantPost(p, 0);
             const idleCount = g.posts.filter(isIdle).length;
-            const collapse = idleCount > 1 && !!foldIdle[g.name];
+            const collapse = idleCount > 0 && hideIdle;
             const shown = collapse ? g.posts.filter((p) => !isIdle(p)) : g.posts;
             return (
             <tbody key={g.name}>
               <tr><td colSpan={4} className="pl-4 sm:pl-5 pr-4 pt-3 pb-1.5" style={{ background: zoneColor(g.name).band }}><div className="flex items-center gap-3 text-[13px] font-bold" style={{ color: zoneColor(g.name).ink }}>{g.name}<span className="font-normal text-ink-2">{g.posts.filter((p) => (byPost.get(p.id)?.length ?? 0) > 0).length ? `${g.posts.reduce((n, p) => n + (byPost.get(p.id)?.length ?? 0), 0)}명` : ''}</span>
-                {idleCount > 1 && <button onClick={() => setFoldIdle((v) => ({ ...v, [g.name]: !v[g.name] }))} className="font-normal text-ink-3 hover:text-ink underline decoration-line underline-offset-2">{collapse ? `쉬는 라인 ${idleCount}개 보기` : `쉬는 라인 ${idleCount}개 접기`}</button>}
+                {collapse && <span className="font-normal text-ink-3">쉬는 라인 {idleCount}개 접힘</span>}
               </div></td></tr>
               {shown.map((p) => {
                 const ppl = byPost.get(p.id) ?? [];
