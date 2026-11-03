@@ -50,3 +50,7 @@ next-env.d.ts
 /.taste-skill/
 
 demo/dist/demo.db
+.taste-skill/deck3/node_modules
+.taste-skill/deck3/*.jpg
+.taste-skill/deck3/*.pdf
+.taste-skill/deck3/package*.json
