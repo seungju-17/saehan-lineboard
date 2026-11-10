@@ -16,6 +16,7 @@ export function Dashboard(): React.ReactElement {
   const [days, setDays] = useState<number>(30);
   const [s, setS] = useState<Stats | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
+  const [showBoard, setShowBoard] = useState(false); // 오늘 배치표는 눌렀을 때만 펼친다
   const date = useMemo(() => todaySeoul(), []);
   const load = useCallback(async (): Promise<void> => {
     const r = await fetch(`/api/stats?factory=${factory}&shift=${shift}&days=${days}&date=${date}`); if (r.ok) setS(await r.json());
@@ -45,11 +46,19 @@ export function Dashboard(): React.ReactElement {
             {s.kpis.map((k) => <KpiTile key={k.key} k={k} baseline={s.baseline} />)}
           </div>
 
-          {/* 오늘 배치표: 돌리는 라인만 간단히. 고치려면 오늘 배치로 */}
-          <Card title={`오늘 배치표 · ${FACTORIES.find(([id]) => id === factory)?.[1]} ${shift}`} sub={board ? (board.status === '확정' ? '확정됨' : board.status === '입안' ? '입안됨' : '작성 중') : undefined}>
-            {board ? <TodayBoard b={board} /> : <Empty>불러오는 중…</Empty>}
-            <div className="mt-3 text-right"><Link href={`/today?date=${date}&shift=${shift}&factory=${factory}`} className="inline-flex items-center h-9 px-3 rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">오늘 배치에서 열기 →</Link></div>
-          </Card>
+          {/* 오늘 배치표: 접혀 있고 누르면 펼친다. 돌리는 라인만, 고치려면 오늘 배치로 */}
+          <section className="bg-white border border-line rounded-xl min-w-0">
+            <button type="button" onClick={() => setShowBoard((v) => !v)} aria-expanded={showBoard} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-ground/60 rounded-xl">
+              <span className="text-[15px] font-semibold">오늘 배치표 {showBoard ? '접기' : '보기'} <span className="font-normal text-ink-2">· {FACTORIES.find(([id]) => id === factory)?.[1]} {shift}</span></span>
+              <span className="flex items-center gap-3 text-[12px] text-ink-3">{board ? (board.status === '확정' ? '확정됨' : board.status === '입안' ? '입안됨' : '작성 중') : ''}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={`transition-transform ${showBoard ? 'rotate-180' : ''}`}><path d="M6 9l6 6 6-6" /></svg></span>
+            </button>
+            {showBoard && (
+              <div className="px-4 pb-4">
+                {board ? <TodayBoard b={board} /> : <Empty>불러오는 중…</Empty>}
+                <div className="mt-3 text-right"><Link href={`/today?date=${date}&shift=${shift}&factory=${factory}`} className="inline-flex items-center h-9 px-3 rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">오늘 배치에서 열기 →</Link></div>
+              </div>
+            )}
+          </section>
 
           {/* 2줄: 라인별 인원 + 근무자 구성 */}
           <div className="grid gap-3 lg:grid-cols-[3fr_2fr]">
