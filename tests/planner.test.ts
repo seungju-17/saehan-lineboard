@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../src/lib/db';
 import { generateDay, generateMonth } from '../src/lib/planner';
-import { confirmMonth, decideUnavailable, getBoard, listProducts, monthView, removePerson, requestUnavailable, setProduct, setProductNeed, setSkill } from '../src/lib/repo';
+import { confirmMonth, decideUnavailable, getBoard, listProducts, monthView, removePerson, requestUnavailable, sendRequests, setProduct, setProductNeed, setSkill } from '../src/lib/repo';
 import { importMonth } from '../src/lib/month-import';
 import { groupsOn } from '../src/lib/shift';
 
@@ -82,5 +82,17 @@ describe('월 근무표 짜기', () => {
     setProduct(b.id, 7, '1KG', d); // 기록 없는 라인도 표준 인원
     expect(getBoard(date, '주간', 1, d).posts.find((p) => p.id === 7)?.need).toBe(3);
     expect(listProducts(1, d).find((p) => p.name === '1KG')?.need).toBe(3);
+  });
+
+  it('생산 계획이 없는 날은 짜지 않고, 대체 요청을 기다리는 자리는 건드리지 않는다', () => {
+    const d = db(); const date = aDay();
+    const empty = getBoard(date, '주간', 1, d);
+    expect(generateDay(empty.id, 'fill', d)).toMatchObject({ filled: 0, noPlan: true });
+    importMonth([{ date, shift: '주간', factory: 1, line: '05', product: '1KG', name: '', need: 1 }], {}, d);
+    const b = getBoard(date, '주간', 1, d);
+    sendRequests(b.id, 5, null, d); // 05에 요청이 나가 있음
+    const r = generateDay(b.id, 'fill', d);
+    expect(r.skippedWaiting).toBe(1);
+    expect(getBoard(date, '주간', 1, d).assignments.filter((a) => a.post_id === 5).length).toBe(0);
   });
 });

@@ -52,9 +52,13 @@ function consecutiveDaysBefore(personId: number, date: string, db: DB): number {
 }
 
 /** 표 하나 짜기. 반환: 채운 수, 못 채운 자리, 배치 못 한 출근자 */
-export function generateDay(boardId: number, mode: 'fill' | 'redo', db: DB = getDb(), ctx?: Ctx): { filled: number; vacant: { code: string; missing: number }[]; unplaced: string[] } {
+export function generateDay(boardId: number, mode: 'fill' | 'redo', db: DB = getDb(), ctx?: Ctx): { filled: number; vacant: { code: string; missing: number }[]; unplaced: string[]; skippedWaiting: number; noPlan: boolean } {
   const b = db.prepare('SELECT date, shift, factory_id, status FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift; factory_id: number; status: string };
-  if (b.status === '확정') return { filled: 0, vacant: [], unplaced: [] };
+  if (b.status === '확정') return { filled: 0, vacant: [], unplaced: [], skippedWaiting: 0, noPlan: false };
+  // 생산 계획(제품이나 필요 인원)이 하나도 없는 날은 짜지 않는다. 직책만 채워 넣으면 빈 날이 짠 것처럼 보인다.
+  const planned = db.prepare("SELECT 1 FROM board_posts WHERE board_id=? AND ((product IS NOT NULL AND product<>'') OR COALESCE(need,0)>0) LIMIT 1").get(boardId);
+  const hasPeople = (db.prepare('SELECT COUNT(*) c FROM assignments WHERE board_id=?').get(boardId) as { c: number }).c > 0;
+  if (!planned && !hasPeople) return { filled: 0, vacant: [], unplaced: [], skippedWaiting: 0, noPlan: true };
   const c = ctx ?? context(b.factory_id, b.date.slice(0, 7), db);
   if (mode === 'redo') db.prepare("DELETE FROM assignments WHERE board_id=? AND source='자동'").run(boardId);
   const month = b.date.slice(0, 7);
@@ -84,7 +88,9 @@ export function generateDay(boardId: number, mode: 'fill' | 'redo', db: DB = get
   const cnt = counters(month, b.factory_id, db);
   const used = new Set<number>((db.prepare('SELECT person_id FROM assignments WHERE board_id=?').all(boardId) as { person_id: number }[]).map((r) => r.person_id));
   const insert = db.prepare("INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source, reason) VALUES (?,?,?,'자동',?)");
-  let filled = 0; const vacant: { code: string; missing: number }[] = [];
+  let filled = 0; const vacant: { code: string; missing: number }[] = []; let skippedWaiting = 0;
+  // 대체 요청이 나가 답을 기다리는 자리는 건드리지 않는다 (수락이 오면 겹친다)
+  const waiting = new Set((db.prepare("SELECT DISTINCT post_id FROM requests WHERE board_id=? AND status='발송'").all(boardId) as { post_id: number }[]).map((r) => r.post_id));
   const std = new Map((db.prepare('SELECT name, need FROM products WHERE factory_id=?').all(b.factory_id) as { name: string; need: number }[]).map((r) => [r.name, r.need]));
   for (const po of posts) {
     if (po.stopped || po.unmanned) continue;
@@ -103,6 +109,7 @@ export function generateDay(boardId: number, mode: 'fill' | 'redo', db: DB = get
     if (po.kind === 'machine' && po.need === null && need > 0) { db.prepare('INSERT INTO board_posts (board_id, post_id, need) VALUES (?,?,?) ON CONFLICT(board_id, post_id) DO UPDATE SET need=excluded.need').run(boardId, po.id, need); }
     let missing = need - have;
     if (missing <= 0) continue;
+    if (waiting.has(po.id)) { skippedWaiting++; continue; }
     const ranked = rankForSlot({ postId: po.id, product: po.product, pool: pool.filter((p) => !used.has(p.id)), experience: c.experience, skills: c.skills, counters: cnt,
       isNight: b.shift === '야간', isWeekend: isWeekend(b.date), fairNight: c.settings.fair_night === 1, fairWeekend: c.settings.fair_weekend === 1, fixedPreference: c.fixedPref.get(po.id) });
     // 직책 자리는 그 자리를 맡아 본 사람 → 없으면 같은 역할(OP·반장)인 출근자. 기계 라인은 임시 인원을 교대 인원 뒤에
@@ -122,7 +129,7 @@ export function generateDay(boardId: number, mode: 'fill' | 'redo', db: DB = get
   // (「기타」에는 생산 계획에 기타 인원을 적어 둔 만큼만 위에서 채운다.) 담당자가 라인을 더 돌리거나 직접 넣어 정한다.
   const unplaced = pool.filter((p) => !used.has(p.id) && p.work_type === '교대' && p.grp === onDuty && home.get(p.id) === b.factory_id).map((p) => p.name);
   db.prepare("INSERT INTO logs (board_id, action, detail) VALUES (?, '자동배치', ?)").run(boardId, `${filled}명, 못 채움 ${vacant.length}자리, 자리 없는 출근자 ${unplaced.length}명`);
-  return { filled, vacant, unplaced };
+  return { filled, vacant, unplaced, skippedWaiting, noPlan: false };
 }
 
 /** 한 달 전체. 표가 없는 날은 건너뛴다(생산 계획이 있어야 짠다). */
