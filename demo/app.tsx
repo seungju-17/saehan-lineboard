@@ -5,7 +5,6 @@ import { Requests } from '../src/components/requests';
 import { People } from '../src/components/people';
 import { Dashboard } from '../src/components/dashboard';
 import { MonthBoard } from '../src/components/month-board';
-import { Assistant } from '../src/components/assistant';
 import { PrintBoard } from '../src/components/print-board';
 import { Respond } from '../src/app/(public)/r/[token]/respond';
 import { MyWork } from '../src/app/(public)/me/[token]/my-work';
@@ -156,7 +155,6 @@ export function App(): React.ReactElement {
           <main className="px-4 sm:px-6 lg:px-8 py-5 sm:py-6 pb-24 max-w-[1280px]">{page}</main>
         </div>
       </div>
-      <Assistant needsKey />
       <Confirm q={q} onDone={() => setQ(null)} />
     </div>
   );

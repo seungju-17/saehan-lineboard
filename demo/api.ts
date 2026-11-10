@@ -6,7 +6,6 @@ import type { LeaveKind } from '../src/lib/rules';
 import { getStats } from '../src/lib/stats';
 import { importMonth, type MonthRow } from '../src/lib/month-import';
 import { generateDay, generateMonth } from '../src/lib/planner';
-import { ask, makeClient, explainApiError, type ChatMessage } from '../src/lib/assistant';
 
 const json = (data: unknown, status = 200): Response => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -59,13 +58,6 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
       const factory = Number(u.searchParams.get('factory') ?? 2), date = u.searchParams.get('date') ?? todaySeoul();
       const shift = (u.searchParams.get('shift') as Shift | null) ?? currentShiftSeoul(), days = Math.min(90, Math.max(7, Number(u.searchParams.get('days') ?? 30)));
       return json(getStats(date, shift, factory, days));
-    }
-    if (path === '/api/ask') {
-      let key = ''; try { key = localStorage.getItem('lb_api_key') ?? ''; } catch { /* 저장소 없음 */ }
-      if (!key) return json({ error: 'no_key', message: 'API 키를 넣으면 물어볼 수 있습니다.' }, 503);
-      const msgs = (body.messages as ChatMessage[] | undefined) ?? [];
-      try { return json(await ask(msgs.slice(-12), { client: makeClient(key, true) })); }
-      catch (e) { const x = explainApiError(e); if (x.badKey) { try { localStorage.removeItem('lb_api_key'); } catch { /* 저장소 없음 */ } } return json({ error: x.badKey ? 'no_key' : 'api', message: x.message }, x.badKey ? 503 : 502); }
     }
     if (path === '/api/requests') return json(allRequests());
     if (path === '/api/leaves') {

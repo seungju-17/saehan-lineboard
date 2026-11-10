@@ -123,10 +123,5 @@ scripts/seed.ts     이력 적재
 
 ## 지원봇 (외부 챗봇 위젯)
 
-화면 오른쪽 아래에 aiconvergencelab 챗봇 위젯(「지원봇」)이 뜹니다. 플랫폼 Knowledge에 올린 문서(근무표 예시 마크다운 `docs/예시/md/*.md`, README 등)로 답하는 봇이라 실시간 표는 모르고, 실시간 질문은 「물어보기」가 맡습니다. 설정은 `src/lib/chat-widget.json`(src·slug·title)이고, src를 비우면 꺼집니다. 설치판은 `src/components/chat-widget.tsx`, 체험판은 빌드 때 `demo/build.mjs`가 같은 값을 script 태그로 넣습니다.
+화면 오른쪽 아래에 aiconvergencelab 챗봇 위젯(「지원봇」)이 뜹니다. 플랫폼 Knowledge에 올린 문서(`docs/챗봇자료/*.md`: 사용법 문답·규칙·조 달력·라인·직원·예시 배치표)로 답하는 봇입니다. 실시간 표(오늘 아침 결근 처리 등)는 모릅니다. 설정은 `src/lib/chat-widget.json`(src·slug·title)이고, src를 비우면 꺼집니다. 설치판은 `src/components/chat-widget.tsx`, 체험판은 빌드 때 `demo/build.mjs`가 같은 값을 script 태그로 넣습니다.
 
-## 물어보기 (배치표 도우미)
-
-오른쪽 아래 「물어보기」는 Claude가 배치표 DB를 읽기 전용으로 조회해 답하는 봇입니다. 표를 바꾸는 도구는 없습니다.
-설치판은 `.env.local` 에 `ANTHROPIC_API_KEY=sk-ant-…` 를 넣고 다시 시작하면 켜집니다 (console.anthropic.com 에서 발급).
-브라우저 판은 키를 본인 브라우저에만 저장해 직접 묻습니다. 모델 `claude-opus-5-5`, 질문 하나에 수 원 수준.
