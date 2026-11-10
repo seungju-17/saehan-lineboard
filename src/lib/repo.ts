@@ -234,7 +234,7 @@ export function setAttendance(boardId: number, postId: number | null, personId: 
   }
   return { sent: 0, candidates: [] };
 }
-/** 두 공장 모두 입안(반장) → 마지막 단계(2공장 결정=팀장, 1공장 확정=팀장·담당자). DB 상태는 둘 다 '확정'. */
+/** (화면에서는 쓰지 않음) 입안. 월 근무표 구조에서는 확정 한 단계만 쓴다. */
 export function proposeBoard(boardId: number, db: DB = getDb()): void {
   db.prepare("UPDATE boards SET status='입안', return_note=NULL WHERE id=? AND status='초안'").run(boardId);
   db.prepare("INSERT INTO logs (board_id, action) VALUES (?, '입안')").run(boardId);
@@ -285,7 +285,7 @@ export function decideLeave(id: number, approve: boolean, reply: string | null, 
 }
 
 /** 관리자 알림함: 처리할 휴가 신청과 최근 일(수락·거절·신청) */
-export type InboxEvent = { at: string; kind: '수락' | '거절' | '만료' | '휴가신청' | '휴가승인' | '휴가거절' | '입안'; text: string; link: string };
+export type InboxEvent = { at: string; kind: '수락' | '거절' | '만료' | '휴가신청' | '휴가승인' | '휴가거절'; text: string; link: string };
 export function adminInbox(db: DB = getDb()): { pending: LeaveRow[]; events: InboxEvent[] } {
   expireDue(db);
   const pending = pendingLeaves(db);
@@ -296,10 +296,6 @@ export function adminInbox(db: DB = getDb()): { pending: LeaveRow[]; events: Inb
   for (const l of recentLeaves(14, db)) {
     events.push({ at: l.status === '신청' ? l.created_at : (l.decided_at ?? l.created_at), kind: l.status === '신청' ? '휴가신청' : l.status === '승인' ? '휴가승인' : '휴가거절', text: `${l.name} ${l.kind} ${l.status === '신청' ? '신청' : l.status} · ${md(l.date)} ${l.shift}${l.note ? ' · ' + l.note : ''}`, link: '/inbox' });
   }
-  // 입안돼서 확정·결정을 기다리는 표 (어제부터 앞으로)
-  const proposed = db.prepare(`SELECT b.date, b.shift, b.factory_id, COALESCE((SELECT MAX(l.at) FROM logs l WHERE l.board_id=b.id AND l.action='입안'), b.date||' 00:00:00') at
-    FROM boards b WHERE b.status='입안' AND b.date >= ? ORDER BY b.date, b.shift`).all(addDays(todaySeoul(), -1)) as { date: string; shift: Shift; factory_id: number; at: string }[];
-  for (const b of proposed) events.push({ at: b.at, kind: '입안', text: `${md(b.date)} ${b.shift} ${factoryName(b.factory_id, db)} 표 입안됨 · ${b.factory_id === 2 ? '결정' : '확정'} 기다림`, link: `/today?date=${b.date}&shift=${b.shift}&factory=${b.factory_id}` });
   events.sort((x, y) => (x.at < y.at ? 1 : -1));
   return { pending, events: events.slice(0, 80) };
 }

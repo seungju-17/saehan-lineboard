@@ -80,7 +80,7 @@ function MonthUpload({ lines }: { lines: { factory: number; code: string; name: 
         <h2 className="text-[17px] font-bold">월 근무표 올리기</h2>
         <button type="button" onClick={() => XLSX.writeFile(monthTemplate(lines, nextMonth), `월근무표_양식_${nextMonth}.xlsx`)} className="text-sm text-brand hover:underline">양식 내려받기 (.xlsx)</button>
       </div>
-      <p className="text-sm text-ink-2">미리 짜 둔 한 달 표를 엑셀로 올리면 날짜·교대·공장마다 배치표가 초안으로 들어갑니다. 한 줄이 한 사람의 한 교대이고, 열은 날짜 · 교대 · 공장 · 라인 · 제품 · 근무자입니다. 이미 확정된 날은 건너뛰고, 작성 중인 날은 파일 내용으로 바뀝니다.</p>
+      <p className="text-sm text-ink-2">미리 짜 둔 한 달 표를 엑셀로 올리면 날짜·교대·공장마다 배치표가 초안으로 들어갑니다. 한 줄이 한 사람의 한 교대이고, 열은 날짜 · 교대 · 공장 · 라인 · 제품 · 근무자입니다. 이미 확정된 날은 건너뛰고, 아직 확정하지 않은 날은 파일 내용으로 바뀝니다.</p>
       <div className="flex flex-wrap items-center gap-3">
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" aria-label="월 근무표 파일" onChange={(e) => pick(e.target.files?.[0])} className="text-sm file:mr-3 file:h-10 file:px-4 file:rounded-md file:border file:border-line file:bg-white file:text-sm file:font-semibold file:text-ink hover:file:border-ink-3" />
         <button type="button" onClick={upload} disabled={busy || !parsed?.rows.length} className="h-10 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">{busy ? '올리는 중…' : '올리기'}</button>

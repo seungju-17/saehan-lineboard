@@ -4,7 +4,7 @@ import { fmtKo, SHIFT_HOURS } from '@/lib/shift';
 import { groupColor, zoneColor } from '@/lib/colors';
 import { LOGO } from '@/lib/logo';
 
-/** 인쇄용 배치표. 구역별 색 띠, 굵은 라인 번호, 조별 색 이름표. 2공장은 결재란(팀장·입안·심사/합의·결정)을 양식대로 둔다. */
+/** 인쇄용 배치표. 구역별 색 띠, 굵은 라인 번호, 조별 색 이름표. 2공장은 결재란(팀장·입안·심사/합의·결정)을 양식대로 두고, 확정되면 결정 칸에 표시한다. */
 export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: string; action?: React.ReactNode }): React.ReactElement {
   const byPost = new Map<number, Board['assignments']>();
   for (const a of b.assignments) byPost.set(a.post_id, [...(byPost.get(a.post_id) ?? []), a]);
@@ -38,13 +38,12 @@ export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: 
             <thead><tr>{['팀장', '입안', '심사/합의', '결정'].map((h) => <th key={h} className="border border-ink px-3 py-1 font-semibold bg-ground">{h}</th>)}</tr></thead>
             <tbody><tr>
               <td className="border border-ink h-12 w-16" />
-              <td className="border border-ink h-12 w-16 align-bottom text-ink-2">{b.status !== '초안' ? '입안' : ''}</td>
               <td className="border border-ink h-12 w-16" />
-              <td className="border border-ink h-12 w-16 align-bottom font-bold" style={{ color: '#2a9d6f' }}>{b.status === '확정' ? '결정' : ''}</td>
+              <td className="border border-ink h-12 w-16" />
+              <td className="border border-ink h-12 w-16 align-bottom font-bold" style={{ color: '#2a9d6f' }}>{b.status === '확정' ? '확정' : ''}</td>
             </tr></tbody>
           </table>
-        ) : b.status === '확정' ? <span className="inline-flex items-center h-7 px-2.5 rounded font-bold text-white" style={{ background: '#2a9d6f' }}>확정</span>
-          : b.status === '입안' ? <span className="inline-flex items-center h-7 px-2.5 rounded font-bold text-ink-2 border border-ink">입안 · 확정 대기</span> : null}
+        ) : b.status === '확정' ? <span className="inline-flex items-center h-7 px-2.5 rounded font-bold text-white" style={{ background: '#2a9d6f' }}>확정</span> : null}
         {action}
       </div>
       <table className="w-full text-[15px] border-collapse border-2 border-ink">

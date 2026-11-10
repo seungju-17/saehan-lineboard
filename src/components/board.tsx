@@ -21,7 +21,6 @@ export function Board(): React.ReactElement {
   const [pop, setPop] = useState<Popover>(null);
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
-  const [reverted, setReverted] = useState(false); // 입안된 표를 고쳐 초안으로 돌아왔음
   const [noCand, setNoCand] = useState<Record<number, boolean>>({}); // 마지막 요청에서 보낼 후보가 없었던 자리
   const [editing, setEditing] = useState<number | null>(null);
   const [needEdit, setNeedEdit] = useState<number | null>(null);
@@ -47,7 +46,7 @@ export function Board(): React.ReactElement {
     const r = await fetch(`/api/board?${q}`); if (r.ok) setBoard(await r.json());
   }, [q]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- 조회 결과 반영
-  useEffect(() => { load(); setPop(null); setNoteEdit(false); setReverted(false); setNoCand({}); }, [load]);
+  useEffect(() => { load(); setPop(null); setNoteEdit(false); setNoCand({}); }, [load]);
   useEffect(() => { if (!flash) return; const t = setTimeout(() => setFlash(null), flash.length > 40 ? 5000 : 2500); return () => clearTimeout(t); }, [flash]);
   // 요청을 보낸 뒤 자동으로 열리는 말풍선이 화면 밖이면 보이게 끌어온다
   useEffect(() => { if (pop?.kind === 'vacancy') popRef.current?.scrollIntoView({ block: 'nearest' }); }, [pop]);
@@ -64,7 +63,6 @@ export function Board(): React.ReactElement {
       const r = await fetch('/api/board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, shift, factory, ...body }) });
       const data = await r.json();
       if (!r.ok) { setFlash(data.error ?? '실패'); return null; }
-      if ((data as { reverted?: boolean }).reverted) setReverted(true);
       setBoard(data); return data;
     } finally { setBusy(false); }
   }
@@ -96,14 +94,10 @@ export function Board(): React.ReactElement {
     for (const p of board?.posts ?? []) { const g = p.zone || '라인'; const last = out[out.length - 1]; if (last && last.name === g) last.posts.push(p); else out.push({ name: g, posts: [p] }); }
     return out;
   }, [board]);
-  // 두 공장 모두 초안 → 입안(반장) → 마지막 단계. 2공장은 결재 문서라 「결정」(팀장만), 1공장은 「확정」(팀장·담당자).
-  const twoStep = factory === 2;
-  const final = twoStep ? '결정' : '확정';
-  const whoFinal = twoStep ? '팀장' : '팀장·담당자';
-  const finalBy = twoStep ? '팀장이 결정' : '팀장·담당자가 확정';
+  // 두 공장 모두 한 단계: 팀장·담당자가 「확정」하면 표가 잠기고 근무자에게 알림이 간다. 월 근무표가 기본이라 입안 단계는 없다.
   const session = useSession();
   const role = session?.kind === 'admin' ? session.role : undefined;
-  const mayDecide = twoStep ? CAN.decide(role) : CAN.confirm(role);
+  const mayDecide = CAN.confirm(role);
 
   /** 빈 자리 전부에 대체 요청. 표에 바로 넣지 않는다. 수락한 사람이 들어간다. */
   async function requestAll(): Promise<void> {
@@ -118,7 +112,7 @@ export function Board(): React.ReactElement {
   async function confirm(): Promise<void> {
     if (!(await ask(`${total}명에게 알림을 보냅니다.`))) return;
     const d = await act({ action: 'confirm' });
-    if (d) setFlash(`${final}했습니다 · 알림 ${(d as BoardT & { notified: number }).notified}건`);
+    if (d) setFlash(`확정했습니다 · 알림 ${(d as BoardT & { notified: number }).notified}건`);
   }
   /** 요청을 보낸 뒤: 누구에게 갔는지 띄우고, 그 자리 말풍선을 열어 한 명씩 취소할 수 있게 한다. */
   function afterSend(p: PostT, d: BoardT, prefix = ''): void {
@@ -161,9 +155,7 @@ export function Board(): React.ReactElement {
           </div>
           <div className="mt-1.5 text-sm text-ink-2 flex flex-wrap items-center gap-x-2">
             {board?.status === '확정'
-              ? <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded font-semibold text-ok bg-ok-bg"><i className="w-1.5 h-1.5 rounded-full bg-ok" />{final}됨{board?.confirmed_at && <span className="font-normal">{board.confirmed_at.slice(11, 16)}</span>}</span>
-              : board?.status === '입안'
-              ? <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded font-semibold text-wait bg-wait-bg"><i className="w-1.5 h-1.5 rounded-full bg-wait" />입안됨 · {final} 대기</span>
+              ? <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded font-semibold text-ok bg-ok-bg"><i className="w-1.5 h-1.5 rounded-full bg-ok" />확정됨{board?.confirmed_at && <span className="font-normal">{board.confirmed_at.slice(11, 16)}</span>}</span>
               : <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded font-semibold text-ink-2 bg-chip"><i className="w-1.5 h-1.5 rounded-full bg-ink-3" />작성 중</span>}
             {board && <>
               <span>근무 <b className="text-ink">{total}</b>명{(men || women) ? <span className="text-ink-3"> (남 {men} · 여 {women})</span> : null}</span>
@@ -185,15 +177,10 @@ export function Board(): React.ReactElement {
           <a href={`/api/attendance/export?month=${date.slice(0, 7)}&factory=${factory}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">월 근태표</a>
           {!locked && <button onClick={requestAll} disabled={busy || vacantCount === 0} title="필요 인원보다 적은 라인마다 후보에게 대체 요청을 보냅니다" className="h-11 px-4 rounded-md border border-brand/30 bg-white text-[15px] font-semibold text-brand hover:border-brand hover:bg-brand-soft disabled:opacity-40">빈 자리 요청 보내기{vacantCount > 0 ? ` ${vacantCount}` : ''}</button>}
           {locked
-            ? (mayDecide && <button onClick={() => act({ action: 'unconfirm' })} disabled={busy} className="h-11 px-4 rounded-md border border-line bg-white text-[15px] font-medium hover:border-ink-3">{final} 해제</button>)
-            : board?.status === '입안' && mayDecide
-            ? <span className="flex items-center gap-2">
-                <button onClick={async () => { const note = window.prompt('반려 사유를 적어 주세요 (작성자에게 보입니다)') ?? null; if (note === null) return; const d = await act({ action: 'return', note }); if (d) setFlash('반려했습니다. 작성자가 고쳐서 다시 입안합니다.'); }} disabled={busy} className="h-11 px-5 rounded-md bg-vac-bg text-vac text-[15px] font-semibold hover:brightness-95 disabled:opacity-40">반려</button>
-                <button onClick={confirm} disabled={busy || total === 0} className="h-11 px-6 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">{final}</button>
-              </span>
-            : board?.status === '초안'
-            ? <button onClick={() => act({ action: 'propose' }).then((d) => { if (d) { setReverted(false); setFlash(`입안했습니다. ${whoFinal} ${final}을 기다립니다.`); } })} disabled={busy || total === 0} className="h-11 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">입안</button>
-            : <span className="h-11 px-4 inline-flex items-center rounded-md bg-chip text-[14px] text-ink-2">입안됨 · {finalBy}합니다</span>}
+            ? (mayDecide && <button onClick={() => act({ action: 'unconfirm' })} disabled={busy} className="h-11 px-4 rounded-md border border-line bg-white text-[15px] font-medium hover:border-ink-3">확정 해제</button>)
+            : mayDecide
+            ? <button onClick={confirm} disabled={busy || total === 0} className="h-11 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">확정</button>
+            : <span className="h-11 px-4 inline-flex items-center rounded-md bg-chip text-[14px] text-ink-2">팀장·담당자가 확정합니다</span>}
         </div>
       </div>
 
@@ -344,8 +331,6 @@ export function Board(): React.ReactElement {
               : <button disabled={locked} onClick={() => setNoteEdit(true)} className={`flex-1 text-left h-8 -mx-2 px-2 rounded-md hover:bg-ground disabled:cursor-default ${board.note ? 'text-ink' : 'text-ink-3'}`}>{board.note ?? '검수 강화, 결원 대응 같은 그날의 특이 사항'}</button>}
           </div>
         )}
-        {board?.return_note && board.status === '초안' && <div className="px-5 py-2.5 border-t border-line-2 text-[14px] bg-vac-bg text-vac"><b>반려됨</b> · {board.return_note} <span className="text-ink-2">— 고친 뒤 다시 입안하세요.</span></div>}
-        {reverted && board?.status === '초안' && <div className="px-5 py-2.5 border-t border-line-2 text-[14px] bg-wait-bg text-wait"><b>입안 취소됨</b> <span className="text-ink-2">— 입안한 뒤 표를 고쳐서 초안으로 돌아왔습니다. 다시 입안하세요.</span></div>}
         {board && !locked && board.assignments.length === 0 && board.posts.every((p) => !p.product) && (
           <div className="px-5 py-4 border-t border-line-2 bg-wait-bg/40 text-[14px]">
             <span className="font-semibold text-ink">받은 근무표가 없는 날입니다.</span>
@@ -353,7 +338,7 @@ export function Board(): React.ReactElement {
           </div>
         )}
         {board?.copied_from && board.status === '초안' && board.assignments.every((a) => a.source === '복사') && (
-          <div className="px-5 py-3 border-t border-line-2 text-[13px] text-ink-3">{board.copied_from} 표를 복사했습니다. 바뀐 곳만 고치고 입안하세요.</div>
+          <div className="px-5 py-3 border-t border-line-2 text-[13px] text-ink-3">{board.copied_from} 표를 복사했습니다. 바뀐 곳만 고치고 확정하세요.</div>
         )}
       </div>
       <Rail board={board} date={date} shift={shift} onCancel={(r) => act({ action: 'cancel_requests', postId: r.post_id, requestId: r.id }).then((d) => d && setFlash(`${r.name} 요청 취소`))} />

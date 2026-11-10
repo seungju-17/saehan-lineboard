@@ -85,7 +85,7 @@ export type ImportSummary = {
   boards: number; created: number; updated: number; skipped: { date: string; shift: Shift; factory: number }[];
   assignments: number; newPeople: string[]; unknownLines: string[]; from: string | null; to: string | null;
 };
-/** 월 근무표를 표로 넣는다. 날짜·교대·공장마다 표 하나. 이미 확정된 표는 건너뛰고, 초안·입안은 내용을 바꾼다.
+/** 월 근무표를 표로 넣는다. 날짜·교대·공장마다 표 하나. 이미 확정된 표는 건너뛰고, 아직 확정하지 않은 표는 내용을 바꾼다.
  *  today 이전 날짜는 confirmPast 가 켜져 있으면 확정으로 넣는다(시드용). */
 export function importMonth(rows: MonthRow[], opts: { today?: string; confirmPast?: boolean } = {}, db: DB = getDb()): ImportSummary {
   const sum: ImportSummary = { boards: 0, created: 0, updated: 0, skipped: [], assignments: 0, newPeople: [], unknownLines: [], from: null, to: null };

@@ -5,7 +5,7 @@ import { fmtKo, fmtShort } from '@/lib/shift';
 import { groupColor } from '@/lib/colors';
 
 const FAC: Record<number, string> = { 1: '1공장', 2: '2공장' };
-const KIND_CLS: Record<InboxEvent['kind'], string> = { 수락: 'bg-ok-bg text-ok', 거절: 'bg-vac-bg text-vac', 만료: 'bg-chip text-ink-3', 휴가신청: 'bg-wait-bg text-wait', 휴가승인: 'bg-ok-bg text-ok', 입안: 'bg-brand-soft text-brand', 휴가거절: 'bg-vac-bg text-vac' };
+const KIND_CLS: Record<InboxEvent['kind'], string> = { 수락: 'bg-ok-bg text-ok', 거절: 'bg-vac-bg text-vac', 만료: 'bg-chip text-ink-3', 휴가신청: 'bg-wait-bg text-wait', 휴가승인: 'bg-ok-bg text-ok', 휴가거절: 'bg-vac-bg text-vac' };
 
 /** 관리자 알림함. 위에 처리할 휴가 신청(승인/거절 + 한 줄 답), 아래에 최근 일. */
 export function Inbox({ initial }: { initial: { pending: LeaveRow[]; events: InboxEvent[] } }): React.ReactElement {
