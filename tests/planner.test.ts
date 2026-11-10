@@ -90,7 +90,8 @@ describe('월 근무표 짜기', () => {
     expect(generateDay(empty.id, 'fill', d)).toMatchObject({ filled: 0, noPlan: true });
     importMonth([{ date, shift: '주간', factory: 1, line: '05', product: '1KG', name: '', need: 1 }], {}, d);
     const b = getBoard(date, '주간', 1, d);
-    sendRequests(b.id, 5, null, d); // 05에 요청이 나가 있음
+    d.prepare("INSERT INTO requests (board_id, post_id, person_id, rank, reason, token, expires_at) VALUES (?,5,3,1,'테스트','t-wait',datetime('now','+1 hour'))").run(b.id); // 05에 요청이 나가 답을 기다리는 중
+    void sendRequests;
     const r = generateDay(b.id, 'fill', d);
     expect(r.skippedWaiting).toBe(1);
     expect(getBoard(date, '주간', 1, d).assignments.filter((a) => a.post_id === 5).length).toBe(0);
