@@ -1,6 +1,6 @@
 {
   "src": "https://chatbot.aiconvergencelab.com/widget.js",
-  "slug": "bot-90ae9771",
-  "title": "지원봇",
+  "slug": "ksj",
+  "title": "ksj 봇",
   "_설명": "외부 챗봇 위젯. 설치판은 src/components/chat-widget.tsx, 체험판은 demo/build.mjs 가 이 값을 읽어 화면 오른쪽 아래에 띄운다. 끄려면 src 를 빈 문자열로."
 }
