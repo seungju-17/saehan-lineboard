@@ -31,7 +31,7 @@ function chatWidgetTag() {
   const cfg = JSON.parse(fs.readFileSync(abs('src/lib/chat-widget.json'), 'utf8'));
   if (!cfg.src) return '';
   const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-  return `\n<script src="${esc(cfg.src)}" data-slug="${esc(cfg.slug)}" data-title="${esc(cfg.title)}" defer></script>`;
+  return `\n<script src="${esc(cfg.src)}" data-slug="${esc(cfg.slug)}" data-title="${esc(cfg.title)}" data-color="${esc(cfg.color)}" data-greeting="${esc(cfg.greeting)}" data-greeting-delay="${esc(cfg.greeting_delay)}" data-position="${esc(cfg.position)}" data-offset="${esc(cfg.offset)}" defer></script>`;
 }
 const DEMO_TODAY = process.env.DEMO_TODAY ?? '2026-11-10'; // 화요일, C조 주간·B조 야간·A조 휴무
 const DEMO_PLAN = process.env.DEMO_PLAN ?? '2026-11-30'; // 2026년 11월 예시 월 근무표를 받아 둔 표(초안)로 넣는다
