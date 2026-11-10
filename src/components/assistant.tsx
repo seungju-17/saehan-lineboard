@@ -41,7 +41,7 @@ export function Assistant({ needsKey = false }: { needsKey?: boolean }): React.R
   return (
     <>
       <button onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-controls="assistant-panel"
-        className="fixed bottom-5 right-5 z-40 h-12 px-4 rounded-full bg-brand text-white text-[15px] font-semibold shadow-[0_8px_24px_rgba(27,37,55,0.25)] hover:bg-brand-2 print:hidden">
+        className="fixed bottom-5 right-24 z-40 h-12 px-4 rounded-full bg-brand text-white text-[15px] font-semibold shadow-[0_8px_24px_rgba(27,37,55,0.25)] hover:bg-brand-2 print:hidden">
         {open ? '닫기' : '물어보기'}
       </button>
       {open && (

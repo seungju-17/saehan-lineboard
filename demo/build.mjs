@@ -26,6 +26,13 @@ const css = fs.readFileSync(abs('demo/dist/demo.css'), 'utf8');
 const sqljs = fs.readFileSync(abs('node_modules/sql.js/dist/sql-wasm.js'), 'utf8');
 const wasm = fs.readFileSync(abs('node_modules/sql.js/dist/sql-wasm.wasm')).toString('base64');
 // 체험판의 「오늘」: 2025년 자료를 날짜 그대로 쓰므로 자료가 끝난 다음 날을 오늘로 본다. 그 이후 표는 넣지 않는다.
+/** 외부 챗봇 위젯(지원봇): src/lib/chat-widget.json 의 값으로 script 태그를 만든다 */
+function chatWidgetTag() {
+  const cfg = JSON.parse(fs.readFileSync(abs('src/lib/chat-widget.json'), 'utf8'));
+  if (!cfg.src) return '';
+  const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  return `\n<script src="${esc(cfg.src)}" data-slug="${esc(cfg.slug)}" data-title="${esc(cfg.title)}" defer></script>`;
+}
 const DEMO_TODAY = process.env.DEMO_TODAY ?? '2026-11-10'; // 화요일, C조 주간·B조 야간·A조 휴무
 const DEMO_PLAN = process.env.DEMO_PLAN ?? '2026-11-30'; // 2026년 11월 예시 월 근무표를 받아 둔 표(초안)로 넣는다
 let dbFile = process.env.LINEBOARD_DB;
@@ -48,7 +55,7 @@ const pages = `<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">
   + html.replace('<title>새한프라텍 인원 배치</title>', '<title>새한프라텍 인원 배치 (체험판)</title>')
         .replace('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">', '<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">')
         .replace('<div id="root"></div>', '</head>\n<body>\n<div id="root"></div>')
-  + '\n</body>\n</html>\n';
+  + chatWidgetTag() + '\n</body>\n</html>\n';
 fs.mkdirSync(abs('docs'), { recursive: true });
 fs.writeFileSync(abs('docs/index.html'), pages);
 fs.writeFileSync(abs('docs/.nojekyll'), '');

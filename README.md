@@ -121,6 +121,10 @@ scripts/seed.ts     이력 적재
 
 시드(`npm run seed [cutoff] [plan_until]`)는 cutoff 이전 표를 확정 이력으로, cutoff부터 plan_until(기본: 그 달 말일)까지를 받아 둔 초안으로 넣습니다. `data/example_2026_11.csv`가 그 예시 월표입니다.
 
+## 지원봇 (외부 챗봇 위젯)
+
+화면 오른쪽 아래에 aiconvergencelab 챗봇 위젯(「지원봇」)이 뜹니다. 플랫폼 Knowledge에 올린 문서(근무표 예시 마크다운 `docs/예시/md/*.md`, README 등)로 답하는 봇이라 실시간 표는 모르고, 실시간 질문은 「물어보기」가 맡습니다. 설정은 `src/lib/chat-widget.json`(src·slug·title)이고, src를 비우면 꺼집니다. 설치판은 `src/components/chat-widget.tsx`, 체험판은 빌드 때 `demo/build.mjs`가 같은 값을 script 태그로 넣습니다.
+
 ## 물어보기 (배치표 도우미)
 
 오른쪽 아래 「물어보기」는 Claude가 배치표 DB를 읽기 전용으로 조회해 답하는 봇입니다. 표를 바꾸는 도구는 없습니다.
