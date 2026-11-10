@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Board as BoardT, RequestRow, SendResult } from '@/lib/repo';
 import { ATTENDANCE_KINDS, OPTIONAL_KINDS, VACATING_KINDS, isVacantPost, needFor, CAN, type AttendanceKind } from '@/lib/rules';
@@ -345,6 +346,12 @@ export function Board(): React.ReactElement {
         )}
         {board?.return_note && board.status === '초안' && <div className="px-5 py-2.5 border-t border-line-2 text-[14px] bg-vac-bg text-vac"><b>반려됨</b> · {board.return_note} <span className="text-ink-2">— 고친 뒤 다시 입안하세요.</span></div>}
         {reverted && board?.status === '초안' && <div className="px-5 py-2.5 border-t border-line-2 text-[14px] bg-wait-bg text-wait"><b>입안 취소됨</b> <span className="text-ink-2">— 입안한 뒤 표를 고쳐서 초안으로 돌아왔습니다. 다시 입안하세요.</span></div>}
+        {board && !locked && board.assignments.length === 0 && board.posts.every((p) => !p.product) && (
+          <div className="px-5 py-4 border-t border-line-2 bg-wait-bg/40 text-[14px]">
+            <span className="font-semibold text-ink">받은 근무표가 없는 날입니다.</span>
+            <span className="ml-2 text-ink-2">{CAN.manage(role) ? <>왼쪽 메뉴 <Link href="/settings" className="text-brand underline">설정 → 월 근무표 올리기</Link>에서 이 달 표를 올리면 채워집니다. 급하면 라인의 「+」로 직접 넣을 수도 있습니다.</> : '담당자가 월 근무표를 올리면 채워집니다.'}</span>
+          </div>
+        )}
         {board?.copied_from && board.status === '초안' && board.assignments.every((a) => a.source === '복사') && (
           <div className="px-5 py-3 border-t border-line-2 text-[13px] text-ink-3">{board.copied_from} 표를 복사했습니다. 바뀐 곳만 고치고 입안하세요.</div>
         )}

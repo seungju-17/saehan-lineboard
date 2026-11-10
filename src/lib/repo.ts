@@ -54,12 +54,22 @@ function boardRow(date: string, shift: Shift, factoryId: number, db: DB): { id: 
 }
 
 /** 보드가 없으면 직전 보드를 복사해 만든다 (버튼 없음). */
+/** 표가 없으면 빈 표를 만든다. 받은 월 근무표가 없는 날은 비어 있다(저절로 복사하지 않는다). */
 export function ensureBoard(date: string, shift: Shift, factoryId: number, db: DB = getDb()): number {
   const ex = boardRow(date, shift, factoryId, db);
   if (ex) return ex.id;
-  // 최근 표 중 "같은 조가 같은 근무를 한 날"의 표에서 교대 인원을, 가장 최근 표에서 제품·주간고정·임시 인원을 가져온다.
-  // 가장 최근 표 60장을 본다. 자료 공백이 길어도 마지막 표에서 복사한다.
-  const all = db.prepare('SELECT id, date FROM boards WHERE shift=? AND factory_id=? AND date<? ORDER BY date DESC LIMIT 60').all(shift, factoryId, date) as { id: number; date: string }[];
+  return Number(db.prepare('INSERT INTO boards (date, shift, factory_id) VALUES (?,?,?)').run(date, shift, factoryId).lastInsertRowid);
+}
+
+/** (화면에서는 쓰지 않음 · 테스트와 자료 준비용) 빈 표에 지난 표를 복사해 온다. "같은 조가 같은 근무를 한 날"의 표에서 교대 인원을, 가장 최근 표에서 제품·주간고정·임시 인원을 가져온다.
+ *  사람이 이미 있는 표나 확정된 표에는 아무것도 하지 않는다. 배치표는 월 근무표 올리기로 채우고, 받은 표가 없는 날은 비워 둔다. */
+export function copyPrevious(boardId: number, db: DB = getDb()): { from: string | null; people: number } {
+  const b = db.prepare('SELECT date, shift, factory_id, status FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift; factory_id: number; status: string } | undefined;
+  if (!b || b.status === '확정') return { from: null, people: 0 };
+  if ((db.prepare('SELECT COUNT(*) c FROM assignments WHERE board_id=?').get(boardId) as { c: number }).c > 0) return { from: null, people: 0 };
+  const { date, shift, factory_id: factoryId } = b; const id = boardId;
+  // 가장 최근 표 60장을 본다. 자료 공백이 길어도 마지막 표에서 복사한다. 비어 있는 표(사람 없음)는 원본에서 뺀다.
+  const all = db.prepare('SELECT id, date FROM boards WHERE shift=? AND factory_id=? AND date<? AND EXISTS (SELECT 1 FROM assignments a WHERE a.board_id=boards.id) ORDER BY date DESC LIMIT 60').all(shift, factoryId, date) as { id: number; date: string }[];
   // 휴일(토·일)은 최소 인원으로 돌아가므로 지난 휴일 표를 기준으로 삼는다.
   const wk = isWeekend(date);
   const pool = wk ? all.filter((r) => isWeekend(r.date)) : all.filter((r) => !isWeekend(r.date));
@@ -67,29 +77,28 @@ export function ensureBoard(date: string, shift: Shift, factoryId: number, db: D
   const latest = recent[0];
   const srcDate = sameGroupBefore(date, shift, recent.map((r) => r.date));
   const src = recent.find((r) => r.date === srcDate) ?? latest;
-  const ins = db.prepare('INSERT INTO boards (date, shift, factory_id, copied_from) VALUES (?,?,?,?)').run(date, shift, factoryId, src?.date ?? null);
-  const id = Number(ins.lastInsertRowid);
-  if (src && latest) {
-    // 제품은 지난 표에서 실제로 돌린 라인(사람이 있었고 부동이 아닌)과 무인 라인만 가져온다. 안 돌린 라인은 엑셀처럼 빈 줄로 시작한다.
-    db.prepare(`INSERT INTO board_posts (board_id, post_id, product, vacant, need) SELECT ?, bp.post_id,
-      CASE WHEN COALESCE(bp.stopped,0)=0 AND (po.unmanned=1 OR EXISTS (SELECT 1 FROM assignments a WHERE a.board_id=bp.board_id AND a.post_id=bp.post_id)) THEN bp.product ELSE NULL END, 0, bp.need
-      FROM board_posts bp JOIN posts po ON po.id=bp.post_id WHERE bp.board_id=?`).run(id, latest.id);
-    db.prepare(`INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source) SELECT ?, a.post_id, a.person_id, '복사' FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? AND p.work_type='교대'`).run(id, src.id);
-    db.prepare(`INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source) SELECT ?, a.post_id, a.person_id, '복사' FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? AND p.work_type<>'교대'`).run(id, latest.id);
-    // 사람이 복사되지 않은 유인 라인은 오늘 안 돌리는 것으로 보고 제품도 비운다 (제품은 최근 표, 사람은 같은 조 표에서 오므로 어긋날 수 있다)
-    db.prepare(`UPDATE board_posts SET product=NULL, need=NULL WHERE board_id=? AND post_id IN (SELECT po.id FROM posts po WHERE po.kind='machine' AND po.unmanned=0)
-      AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id)`).run(id);
-    // 반대로 사람은 왔는데 최근 표에 제품이 없던 라인은 사람을 데려온 표(같은 조 표)의 제품을 쓴다. 사람만 있고 제품이 빈 줄이 생기지 않게.
-    db.prepare(`INSERT OR IGNORE INTO board_posts (board_id, post_id) SELECT DISTINCT ?, post_id FROM assignments WHERE board_id=?`).run(id, id);
-    db.prepare(`UPDATE board_posts SET product=(SELECT s.product FROM board_posts s WHERE s.board_id=? AND s.post_id=board_posts.post_id AND COALESCE(s.stopped,0)=0)
-      WHERE board_id=? AND (product IS NULL OR product='') AND post_id IN (SELECT po.id FROM posts po WHERE po.kind='machine' AND po.unmanned=0)
-      AND EXISTS (SELECT 1 FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id)`).run(src.id, id);
-    // 필요 인원 = 복사돼 들어온 인원
-    db.prepare('INSERT OR IGNORE INTO board_posts (board_id, post_id) SELECT DISTINCT ?, post_id FROM assignments WHERE board_id=?').run(id, id);
-    db.prepare('UPDATE board_posts SET need=COALESCE(NULLIF((SELECT COUNT(*) FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id), 0), need) WHERE board_id=?').run(id);
-    db.prepare("INSERT INTO logs (board_id, action, detail) VALUES (?, '복사', ?)").run(id, src.id === latest.id ? src.date : `교대 ${src.date} · 그 외 ${latest.date}`);
-  }
-  return id;
+  if (!src || !latest) return { from: null, people: 0 };
+  db.prepare('DELETE FROM board_posts WHERE board_id=?').run(id);
+  db.prepare('UPDATE boards SET copied_from=? WHERE id=?').run(src.date, id);
+  // 제품은 지난 표에서 실제로 돌린 라인(사람이 있었고 부동이 아닌)과 무인 라인만 가져온다. 안 돌린 라인은 엑셀처럼 빈 줄로 시작한다.
+  db.prepare(`INSERT INTO board_posts (board_id, post_id, product, vacant, need) SELECT ?, bp.post_id,
+    CASE WHEN COALESCE(bp.stopped,0)=0 AND (po.unmanned=1 OR EXISTS (SELECT 1 FROM assignments a WHERE a.board_id=bp.board_id AND a.post_id=bp.post_id)) THEN bp.product ELSE NULL END, 0, bp.need
+    FROM board_posts bp JOIN posts po ON po.id=bp.post_id WHERE bp.board_id=?`).run(id, latest.id);
+  db.prepare(`INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source) SELECT ?, a.post_id, a.person_id, '복사' FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? AND p.work_type='교대'`).run(id, src.id);
+  db.prepare(`INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source) SELECT ?, a.post_id, a.person_id, '복사' FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? AND p.work_type<>'교대'`).run(id, latest.id);
+  // 사람이 복사되지 않은 유인 라인은 오늘 안 돌리는 것으로 보고 제품도 비운다 (제품은 최근 표, 사람은 같은 조 표에서 오므로 어긋날 수 있다)
+  db.prepare(`UPDATE board_posts SET product=NULL, need=NULL WHERE board_id=? AND post_id IN (SELECT po.id FROM posts po WHERE po.kind='machine' AND po.unmanned=0)
+    AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id)`).run(id);
+  // 반대로 사람은 왔는데 최근 표에 제품이 없던 라인은 사람을 데려온 표(같은 조 표)의 제품을 쓴다. 사람만 있고 제품이 빈 줄이 생기지 않게.
+  db.prepare(`INSERT OR IGNORE INTO board_posts (board_id, post_id) SELECT DISTINCT ?, post_id FROM assignments WHERE board_id=?`).run(id, id);
+  db.prepare(`UPDATE board_posts SET product=(SELECT s.product FROM board_posts s WHERE s.board_id=? AND s.post_id=board_posts.post_id AND COALESCE(s.stopped,0)=0)
+    WHERE board_id=? AND (product IS NULL OR product='') AND post_id IN (SELECT po.id FROM posts po WHERE po.kind='machine' AND po.unmanned=0)
+    AND EXISTS (SELECT 1 FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id)`).run(src.id, id);
+  // 필요 인원 = 복사돼 들어온 인원
+  db.prepare('UPDATE board_posts SET need=COALESCE(NULLIF((SELECT COUNT(*) FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id), 0), need) WHERE board_id=?').run(id);
+  db.prepare("INSERT INTO logs (board_id, action, detail) VALUES (?, '복사', ?)").run(id, src.id === latest.id ? src.date : `교대 ${src.date} · 그 외 ${latest.date}`);
+  const people = (db.prepare('SELECT COUNT(DISTINCT person_id) c FROM assignments WHERE board_id=?').get(id) as { c: number }).c;
+  return { from: src.date, people };
 }
 
 /** 달력용: 그 달에 있는 표의 상태·근무 인원·빈 자리 수 */

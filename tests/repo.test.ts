@@ -1,12 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { openDb } from '../src/lib/db';
-import { addPerson, removePerson, cancelRequests, getSettings, setSettings, weekHoursFor, needFor, setNeed, setProduct, clearVacancy, ensureBoard, getBoard, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
+import { addPerson, removePerson, cancelRequests, getSettings, setSettings, weekHoursFor, needFor, setNeed, setProduct, clearVacancy, ensureBoard, getBoard as getBoardRaw, copyPrevious, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
 import { periodFor } from '../src/lib/attendance-xlsx';
 import { requestVacancies, loginAccount, personByPhone, myWork, ensureToken, requestLeave, decideLeave, pendingLeaves, adminInbox, returnBoard, proposeBoard as propose2 } from '../src/lib/repo';
 import { autoFill, revertProposal, EDIT_ACTIONS } from '../src/lib/repo';
 import { parseSession, sessionCookie, meCookie, parseMe } from '../src/lib/auth';
 import { addDays, groupsOn } from '../src/lib/shift';
 import { CAN } from '../src/lib/rules';
+
+/** 표 열기 + 「지난 표 복사해 오기」. 예전엔 열면 자동 복사됐지만 이제 버튼이므로 테스트에서 대신 누른다. */
+function getBoard(date: string, shift: '주간' | '야간', factoryId: number, db: ReturnType<typeof openDb>) {
+  const b = getBoardRaw(date, shift, factoryId, db);
+  if (b.assignments.length === 0 && b.status !== '확정') { copyPrevious(b.id, db); return getBoardRaw(date, shift, factoryId, db); }
+  return b;
+}
 
 function memDb() {
   const db = openDb(':memory:');
@@ -252,7 +259,7 @@ describe('2공장 결재와 휴일 복사', () => {
     db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (2,'2026-10-18','주간',2,'확정')").run();
     db.prepare("INSERT INTO board_posts (board_id, post_id, product) VALUES (2,36,'생수900')").run();
     addPerson(2, 36, 2, '이력', db);
-    const id = ensureBoard('2026-10-24', '주간', 2, db);
+    const id = ensureBoard('2026-10-24', '주간', 2, db); copyPrevious(id, db);
     const names = (db.prepare('SELECT p.name FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=?').all(id) as { name: string }[]).map((r) => r.name);
     expect(names).toContain('김순자');
     expect(names).not.toContain('박현주');
@@ -402,6 +409,7 @@ describe('휴가 신청과 반려', () => {
     expect(requestLeave(1, '2026-10-21', '주간', '반차', null, db).ok).toBe(false); // 중복
     expect(pendingLeaves(db).map((l) => l.name)).toEqual(['박현주']);
     expect(adminInbox(db).events.some((e) => e.kind === '휴가신청' && e.text.includes('박현주'))).toBe(true);
+    getBoard('2026-10-21', '주간', 2, db); // 그날 표가 있어야(월 근무표 또는 복사) 자리를 비울 수 있다
     const d = decideLeave(r.id!, true, '확인', '팀장', db);
     expect(d.ok).toBe(true); expect(d.sent).toBe(1);
     const b = getBoard('2026-10-21', '주간', 2, db);
