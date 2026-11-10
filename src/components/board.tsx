@@ -182,7 +182,7 @@ export function Board(): React.ReactElement {
           <a href={`/api/board/export?${q}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">엑셀</a>
           <a href={`/api/attendance/export?month=${date.slice(0, 7)}&factory=${factory}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">월 근태표</a>
           {!locked && <button onClick={requestAll} disabled={busy || vacantCount === 0} title="필요 인원보다 적은 라인마다 후보에게 대체 요청을 보냅니다" className="h-11 px-4 rounded-md border border-brand/30 bg-white text-[15px] font-semibold text-brand hover:border-brand hover:bg-brand-soft disabled:opacity-40">빈 자리 요청 보내기{vacantCount > 0 ? ` ${vacantCount}` : ''}</button>}
-          <button onClick={generateDay} disabled={busy} title="그날 출근하는 사람(근무조·주간고정·임시) 중에서 비어 있는 라인을 숙련도·경험·형평 기준으로 채웁니다. 쉬는 조는 쓰지 않습니다." className="h-11 px-4 rounded-md border border-line bg-white text-[15px] font-semibold text-ink hover:border-ink-3 disabled:opacity-40">이 날 자동 배치</button>
+          <button onClick={generateDay} disabled={busy || vacantCount === 0 || board?.status === '확정'} title={board?.status === '확정' ? '확정된 표는 자동 배치하지 않습니다. 사람을 바꾸려면 직접 고치세요.' : vacantCount === 0 ? '빈 자리가 없어 채울 것이 없습니다. 라인 인원을 늘리거나 제품을 적으면 켜집니다.' : '그날 출근하는 사람(근무조·주간고정·임시) 중에서 비어 있는 라인을 숙련도·경험·형평 기준으로 채웁니다. 쉬는 조는 쓰지 않습니다.'} className="h-11 px-4 rounded-md border border-line bg-white text-[15px] font-semibold text-ink hover:border-ink-3 disabled:opacity-40">이 날 자동 배치{vacantCount > 0 ? ` ${vacantCount}` : ''}</button>
         </div>
       </div>
 
