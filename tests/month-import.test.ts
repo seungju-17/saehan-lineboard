@@ -32,6 +32,13 @@ describe('월 근무표 읽기', () => {
     ]);
     expect(r.problems).toEqual([]);
   });
+  it('근무자 없이 인원만 적은 줄은 생산 계획으로 읽힌다', () => {
+    const r = parseMonthSheet(sheet([['날짜', '교대', '공장', '라인', '제품', '인원', '근무자'], ['2026-12-01', '주간', '1공장', '05', '1KG', 2, ''], ['2026-12-01', '주간', '1공장', '07', '옹기', 1, '홍길동']]));
+    expect(r.rows).toEqual([
+      { date: '2026-12-01', shift: '주간', factory: 1, line: '05', product: '1KG', name: '', need: 2 },
+      { date: '2026-12-01', shift: '주간', factory: 1, line: '07', product: '옹기', name: '홍길동', need: 1 },
+    ]);
+  });
   it('엑셀 날짜 숫자도 읽는다', () => {
     const serial = 46336; // 2026-11-10
     const r = parseMonthSheet(sheet([['날짜', '교대', '공장', '라인', '제품', '근무자'], [serial, '주간', '1공장', '05', '', '홍길동']]));
@@ -71,6 +78,13 @@ describe('월 근무표 넣기', () => {
     expect(s.updated).toBe(1);
     expect(getBoard('2026-11-11', '야간', 2, d).assignments.map((a) => a.name)).toEqual(['다른사람']);
     expect(getBoard('2026-11-10', '주간', 1, d).assignments.length).toBe(3); // 확정 표는 그대로
+  });
+  it('생산 계획 줄은 사람 없이 제품·필요 인원만 넣는다', () => {
+    const d = db();
+    const s = importMonth([{ date: '2026-12-01', shift: '주간', factory: 1, line: '05', product: '1KG', name: '', need: 2 }], {}, d);
+    expect(s.boards).toBe(1); expect(s.assignments).toBe(0); expect(s.planned).toBe(1);
+    const b = getBoard('2026-12-01', '주간', 1, d);
+    expect(b.posts.find((p) => p.id === 5)?.need).toBe(2); expect(b.posts.find((p) => p.id === 5)?.product).toBe('1KG'); expect(b.assignments).toEqual([]);
   });
   it('시드처럼 지난 날은 확정으로 넣을 수 있다', () => {
     const d = db();

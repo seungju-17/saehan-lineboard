@@ -4,6 +4,7 @@ import { Nav, TopBar } from '../src/components/nav';
 import { Requests } from '../src/components/requests';
 import { People } from '../src/components/people';
 import { Dashboard } from '../src/components/dashboard';
+import { MonthBoard } from '../src/components/month-board';
 import { Assistant } from '../src/components/assistant';
 import { PrintBoard } from '../src/components/print-board';
 import { Respond } from '../src/app/(public)/r/[token]/respond';
@@ -141,6 +142,7 @@ export function App(): React.ReactElement {
   else if (path === '/inbox') page = <Inbox key="inbox" initial={inbox} />;
   else if (path === '/settings') page = <SettingsForm key="set" initial={getSettings()} lines={listPosts()} />;
   else if (path === '/dashboard') page = <Dashboard />;
+  else if (path === '/month') page = <MonthBoard />;
   else if (path === '/print') page = <PrintView />;
   else if (path === '/login') page = <DemoLogin />;
   else page = <Board />;

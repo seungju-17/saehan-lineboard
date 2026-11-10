@@ -18,7 +18,13 @@ export function currentPath(): string {
   if (h.startsWith('me-')) return '/me/' + h.slice(3);
   return '/' + h;
 }
-export function navigate(path: string): void { location.hash = toHash(path); }
+/** 주소 이동. 물음표 뒤 값(date·shift·factory)은 주소의 검색 부분에 두고 해시로 화면을 바꾼다. 같은 화면이면 강제로 다시 그리게 한다. */
+export function navigate(path: string): void {
+  const q = path.includes('?') ? path.slice(path.indexOf('?') + 1) : '';
+  const hash = toHash(path);
+  try { history.replaceState(null, '', `${location.pathname}${q ? `?${q}` : ''}#${hash}`); } catch { /* file:// 등에서 막히면 해시만 */ }
+  if (location.hash !== `#${hash}`) location.hash = hash; else window.dispatchEvent(new HashChangeEvent('hashchange'));
+}
 export function usePathname(): string { return useSyncExternalStore(sub, currentPath, () => '/today'); }
 export function useRouter(): { push: (p: string) => void; refresh: () => void } { return { push: navigate, refresh: () => undefined }; }
 export function useSearchParams(): URLSearchParams { return new URLSearchParams(); }

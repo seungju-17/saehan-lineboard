@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateDay } from '@/lib/planner';
 import { type AttendanceKind, addPerson, requestVacancies, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, monthSummary, nextCandidates, removePerson, returnBoard, sendRequests, setProduct, unconfirmBoard, autoFill, setNeed, revertProposal, EDIT_ACTIONS } from '@/lib/repo';
 import type { Shift } from '@/lib/shift';
 
@@ -35,6 +36,7 @@ type Action =
   | { action: 'return'; note?: string | null }
   | { action: 'autofill' }
   | { action: 'request_all' }
+  | { action: 'generate_day'; mode?: 'fill' | 'redo' }
   | { action: 'confirm' }
   | { action: 'unconfirm' };
 
@@ -67,6 +69,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       case 'return': returnBoard(board.id, body.note ?? null); break;
       case 'autofill': extra = { ...extra, ...autoFill(board.id) }; break;
       case 'request_all': extra = { ...extra, ...requestVacancies(board.id) }; break;
+      case 'generate_day': extra = { ...extra, ...generateDay(board.id, body.mode === 'redo' ? 'redo' : 'fill') }; break;
       case 'confirm': extra = confirmBoard(board.id); break;
       case 'unconfirm': unconfirmBoard(board.id); break;
       default: return NextResponse.json({ error: 'unknown action' }, { status: 400 });

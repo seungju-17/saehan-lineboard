@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import type { InboxEvent, LeaveRow } from '@/lib/repo';
+import type { InboxEvent, LeaveRow, UnavailRow } from '@/lib/repo';
 import { fmtKo, fmtShort } from '@/lib/shift';
 import { groupColor } from '@/lib/colors';
 
@@ -8,7 +8,10 @@ const FAC: Record<number, string> = { 1: '1공장', 2: '2공장' };
 const KIND_CLS: Record<InboxEvent['kind'], string> = { 수락: 'bg-ok-bg text-ok', 거절: 'bg-vac-bg text-vac', 만료: 'bg-chip text-ink-3', 휴가신청: 'bg-wait-bg text-wait', 휴가승인: 'bg-ok-bg text-ok', 휴가거절: 'bg-vac-bg text-vac' };
 
 /** 관리자 알림함. 위에 처리할 휴가 신청(승인/거절 + 한 줄 답), 아래에 최근 일. */
-export function Inbox({ initial }: { initial: { pending: LeaveRow[]; events: InboxEvent[] } }): React.ReactElement {
+const WDN = ['일', '월', '화', '수', '목', '금', '토'];
+function describeUnavail(r: UnavailRow): string { const sh = r.shift ? ` ${r.shift}` : ' (주·야 모두)'; return r.kind === '날짜' ? `${fmtKo(r.date!)}${sh}` : `매주 ${WDN[r.weekday!]}요일${sh}`; }
+
+export function Inbox({ initial }: { initial: { pending: LeaveRow[]; pendingUnavail?: UnavailRow[]; events: InboxEvent[] } }): React.ReactElement {
   const [d, setD] = useState(initial);
   const [reply, setReply] = useState<Record<number, string>>({});
   const [note, setNote] = useState<string | null>(null);
@@ -18,11 +21,18 @@ export function Inbox({ initial }: { initial: { pending: LeaveRow[]; events: Inb
     setNote(j.message ?? j.error ?? '처리했습니다');
     setD(await (await fetch('/api/leaves')).json());
   }
+  async function decideU(id: number, approve: boolean): Promise<void> {
+    const r = await fetch('/api/unavailable', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, approve, reply: reply[-id] ?? null }) });
+    const j = await r.json() as { message?: string; error?: string };
+    setNote(j.message ?? j.error ?? '처리했습니다');
+    setD(await (await fetch('/api/leaves')).json());
+  }
+  const pu = d.pendingUnavail ?? [];
   return (
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-[26px] font-bold tracking-tight leading-none">알림</h1>
-        <div className="mt-1.5 text-sm text-ink-2">처리할 휴가 신청 <b className="text-ink">{d.pending.length}</b>건 · 최근 7일 일 {d.events.length}건</div>
+        <div className="mt-1.5 text-sm text-ink-2">처리할 휴가 신청 <b className="text-ink">{d.pending.length}</b>건 · 불가일 신청 <b className="text-ink">{pu.length}</b>건 · 최근 7일 일 {d.events.length}건</div>
       </div>
       {note && <div role="status" className="bg-ok-bg text-ok rounded-lg px-4 py-3 font-semibold">{note}</div>}
       <section className="bg-white border border-line rounded-xl">
@@ -40,6 +50,27 @@ export function Inbox({ initial }: { initial: { pending: LeaveRow[]; events: Inb
                 <div className="flex gap-2 ml-auto">
                   <button onClick={() => decide(l.id, false)} className="h-11 px-5 rounded-md bg-vac-bg text-vac font-semibold hover:brightness-95">거절</button>
                   <button onClick={() => decide(l.id, true)} className="h-11 px-6 rounded-md bg-brand text-white font-semibold hover:bg-brand-2">승인</button>
+                </div>
+              </li>
+            ); })}
+          </ul>
+        )}
+      </section>
+      <section className="bg-white border border-line rounded-xl">
+        <h2 className="px-5 pt-4 pb-2 text-[15px] font-semibold">불가일 신청 <span className="text-sm font-normal text-ink-3">승인하면 월 근무표를 짤 때 그날·그 요일은 뺍니다</span></h2>
+        {pu.length === 0 ? <p className="px-5 pb-5 text-sm text-ink-3">기다리는 신청이 없습니다. 근무자가 폰 「근태」 탭에서 못 나오는 날이나 요일을 미리 알리면 여기에 쌓입니다.</p> : (
+          <ul className="divide-y divide-line-2">
+            {pu.map((u) => { const gc = groupColor(u.grp, u.work_type); return (
+              <li key={u.id} className="px-5 py-4 flex flex-wrap items-center gap-x-5 gap-y-3">
+                <div className="min-w-[200px]">
+                  <div className="flex items-center gap-2"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: gc.ink }} /><b className="text-[16px]">{u.name}</b><span className="text-sm text-ink-3">{u.work_type === '임시' ? '임시' : `${u.grp}조`}</span></div>
+                  <div className="mt-1 text-[15px]"><span className="inline-flex items-center h-6 px-2 rounded bg-wait-bg text-wait font-semibold text-sm mr-2">{u.kind === '날짜' ? '특정 날' : '매주'}</span>{describeUnavail(u)}{u.note && <span className="ml-2 text-ink-2">· {u.note}</span>}</div>
+                  <div className="mt-0.5 text-xs text-ink-3">신청 {u.created_at.slice(5, 16)}</div>
+                </div>
+                <input value={reply[-u.id] ?? ''} onChange={(e) => setReply({ ...reply, [-u.id]: e.target.value })} placeholder="한 줄 답 (선택)" aria-label={`${u.name} 불가일 신청에 답`} className="h-11 px-3 rounded-md border border-line bg-white text-[15px] w-64 focus:border-brand" />
+                <div className="flex gap-2 ml-auto">
+                  <button onClick={() => decideU(u.id, false)} className="h-11 px-5 rounded-md bg-vac-bg text-vac font-semibold hover:brightness-95">거절</button>
+                  <button onClick={() => decideU(u.id, true)} className="h-11 px-6 rounded-md bg-brand text-white font-semibold hover:bg-brand-2">승인</button>
                 </div>
               </li>
             ); })}

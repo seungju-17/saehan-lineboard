@@ -1,10 +1,11 @@
 /* 브라우저 판: /api/* 호출을 서버 없이 repo 함수로 바로 연결한다. src/app/api/* 와 같은 동작. */
 import { getDb } from './db-shim';
-import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, requestVacancies, personSkills, setSkill, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, monthSummary, myWork, adminInbox, decideLeave, requestLeave, returnBoard, weekHoursFor, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard, revertProposal, EDIT_ACTIONS } from '../src/lib/repo';
+import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, requestVacancies, personSkills, setSkill, listProducts, setProductNeed, monthView, confirmMonth, pendingUnavailable, decideUnavailable, requestUnavailable, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, monthSummary, myWork, adminInbox, decideLeave, requestLeave, returnBoard, weekHoursFor, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard, revertProposal, EDIT_ACTIONS } from '../src/lib/repo';
 import { currentShiftSeoul, todaySeoul, type Shift } from '../src/lib/shift';
 import type { LeaveKind } from '../src/lib/rules';
 import { getStats } from '../src/lib/stats';
 import { importMonth, type MonthRow } from '../src/lib/month-import';
+import { generateDay, generateMonth } from '../src/lib/planner';
 import { ask, makeClient, explainApiError, type ChatMessage } from '../src/lib/assistant';
 
 const json = (data: unknown, status = 200): Response => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -42,6 +43,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
         case 'return': returnBoard(board.id, (body.note as string | null) ?? null); break;
         case 'autofill': extra = { ...extra, ...autoFill(board.id) }; break;
         case 'request_all': extra = { ...extra, ...requestVacancies(board.id) }; break;
+        case 'generate_day': extra = { ...extra, ...generateDay(board.id, body.mode === 'redo' ? 'redo' : 'fill') }; break;
         case 'confirm': extra = confirmBoard(board.id); break;
         case 'unconfirm': unconfirmBoard(board.id); break;
         default: return json({ error: 'unknown action' }, 400);
@@ -73,6 +75,21 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
       return json(r, r.ok ? 200 : 409);
     }
     if (path === '/api/settings') { if (method === 'GET') return json(getSettings()); try { return json(setSettings(body as Partial<Settings>)); } catch (e) { return json({ error: (e as Error).message }, 400); } }
+    if (path === '/api/products') {
+      if (method === 'GET') return json(listProducts(Number(u.searchParams.get('factory'))));
+      setProductNeed(Number(body.factory), String(body.name), body.need === null || body.need === undefined ? null : Number(body.need)); return json({ ok: true });
+    }
+    if (path === '/api/month') {
+      if (method === 'GET') return json({ cells: monthView(String(u.searchParams.get('month')), Number(u.searchParams.get('factory'))) });
+      if (body.action === 'generate') return json(generateMonth(String(body.month), Number(body.factory), body.mode === 'redo' ? 'redo' : 'fill'));
+      if (body.action === 'confirm') return json(confirmMonth(String(body.month), Number(body.factory)));
+      return json({ error: 'action' }, 400);
+    }
+    if (path === '/api/unavailable') {
+      if (method === 'GET') return json(pendingUnavailable());
+      let who = '관리자'; try { const r = localStorage.getItem('lb_role'); if (r) who = (JSON.parse(r) as { name: string }).name; } catch { /* 저장소 없음 */ }
+      const r = decideUnavailable(Number(body.id), !!body.approve, (body.reply as string | null) ?? null, who); return json(r, r.ok ? 200 : 409);
+    }
     if (path === '/api/skills') {
       if (method === 'GET') return json(personSkills(Number(u.searchParams.get('person'))));
       setSkill(Number(body.person), Number(body.post), (body.level as '불가' | '가능' | '숙련' | null) ?? null); return json({ ok: true });
@@ -119,6 +136,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
       let me = ''; try { me = localStorage.getItem('lb_me') ?? ''; } catch { /* 저장소 없음 */ }
       const tok = (method === 'GET' ? u.searchParams.get('token') : (body.token as string | undefined)) || me;
       if (method === 'GET') { const d = myWork(tok); return d ? json(d) : json({ error: '로그인이 필요합니다' }, 401); }
+      if (body.action === 'unavailable') { const p = personByToken(tok); if (!p) return json({ error: '로그인이 필요합니다' }, 401); const r = requestUnavailable(p.id, { kind: (body.ukind as '날짜' | '요일') ?? '날짜', date: (body.date as string | null) ?? null, weekday: (body.weekday as number | null) ?? null, shift: (body.ushift as Shift | null) ?? null, note: (body.note as string | null) ?? null }); return json(r, r.ok ? 200 : 409); }
       if (body.action === 'leave') { const p = personByToken(tok); if (!p) return json({ error: '로그인이 필요합니다' }, 401); const r = requestLeave(p.id, String(body.date ?? ''), body.shift as Shift, body.kind as LeaveKind, (body.note as string | null) ?? null); return json(r, r.ok ? 200 : 409); }
       return json({ ok: markRead(tok, Number(body.messageId)) });
     }

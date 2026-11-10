@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { aggregateExperience, assignmentMessage, availability, rankCandidates, typicalHeadcount, type Person } from '../src/lib/engine';
+import { aggregateExperience, assignmentMessage, availability, rankCandidates, typicalHeadcount, type Person, type SkillLevel, type SkillMap } from '../src/lib/engine';
 import { addDays, dayTypeOf, groupsOn, sameGroupBefore, REFERENCE_DATE } from '../src/lib/shift';
 
 const DATE = '2026-10-30';
@@ -81,13 +81,13 @@ describe('라인 숙련도', () => {
   ];
   const experience = [{ personId: 2, postId: 5, product: null, count: 9 }, { personId: 1, postId: 5, product: null, count: 1 }];
   it('불가로 정한 사람은 기록이 많아도 빠지고, 숙련은 앞에 선다', () => {
-    const skills = new Map([[2, new Map([[5, '불가' as const]])], [1, new Map([[5, '숙련' as const]])]]);
+    const skills: SkillMap = new Map([[2, new Map<number, SkillLevel>([[5, '불가']])], [1, new Map<number, SkillLevel>([[5, '숙련']])]]);
     const r = rankCandidates({ ...base, people, experience, skills, limit: 5 });
     expect(r.map((c) => c.name)).toEqual(['김숙련']);
     expect(r[0].reasons).toContain('이 라인 숙련');
   });
   it('가능으로 정하면 기록이 없어도 후보가 된다', () => {
-    const skills = new Map([[3, new Map([[5, '가능' as const]])]]);
+    const skills: SkillMap = new Map([[3, new Map<number, SkillLevel>([[5, '가능']])]]);
     const r = rankCandidates({ ...base, people, experience, skills, limit: 5 });
     expect(r.map((c) => c.name)).toEqual(['이불가', '김숙련', '박기록없음']); // 숙련도를 안 정한 이불가는 기록 9회로 1등
   });

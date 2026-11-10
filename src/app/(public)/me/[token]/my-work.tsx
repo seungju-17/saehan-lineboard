@@ -13,6 +13,7 @@ type Data = {
   week: { from: string; to: string; shifts: number; hours: number; plannedShifts: number; plannedHours: number; max: number; shiftHours: number };
   attendance: { date: string; shift: string; kind: string; note: string | null }[];
   leaves: { id: number; date: string; shift: string; kind: string; note: string | null; status: string; reply: string | null }[];
+  unavailable?: { id: number; kind: '날짜' | '요일'; date: string | null; weekday: number | null; shift: string | null; note: string | null; status: string; reply: string | null }[];
   workDays: { date: string; shift: string; factory: string; post: string }[];
   error?: string;
 };
@@ -32,6 +33,8 @@ export function MyWork({ token }: { token?: string }): React.ReactElement {
   const [note, setNote] = useState<string | null>(null);
   const [month, setMonth] = useState<string | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [unOpen, setUnOpen] = useState(false);
+  const [un, setUn] = useState<{ kind: '날짜' | '요일'; date: string; weekday: number; shift: '' | '주간' | '야간'; note: string }>({ kind: '날짜', date: '', weekday: 1, shift: '', note: '' });
   const [lv, setLv] = useState<{ date: string; shift: '주간' | '야간'; kind: LeaveKind; note: string }>({ date: '', shift: '주간', kind: '연차', note: '' });
   const q = token ? `?token=${token}` : '';
   const load = useCallback(async (): Promise<void> => { setD(await (await fetch(`/api/public/me${q}`)).json()); }, [q]);
@@ -52,6 +55,12 @@ export function MyWork({ token }: { token?: string }): React.ReactElement {
     const r = await post({ action: 'leave', date: lv.date, shift: lv.shift, kind: lv.kind, note: lv.note || null });
     setNote(r.message ?? r.error ?? '처리했습니다');
     if (r.ok) { setLeaveOpen(false); setLv({ date: '', shift: '주간', kind: '연차', note: '' }); await load(); }
+  }
+  async function submitUnavailable(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+    const r = await post({ action: 'unavailable', ukind: un.kind, date: un.kind === '날짜' ? un.date : null, weekday: un.kind === '요일' ? un.weekday : null, ushift: un.shift || null, note: un.note || null });
+    setNote(r.message ?? r.error ?? '처리했습니다');
+    if (r.ok) { setUnOpen(false); setUn({ kind: '날짜', date: '', weekday: 1, shift: '', note: '' }); await load(); }
   }
   if (!d) return <p className="text-ink-3">불러오는 중…</p>;
   if (d.error) return <div className="flex flex-col gap-3"><p className="text-ink-2">{d.error}</p><a href="/login?who=worker" className="h-12 inline-flex items-center justify-center rounded-lg bg-brand text-white font-semibold">근무자 로그인</a></div>;
@@ -151,6 +160,32 @@ export function MyWork({ token }: { token?: string }): React.ReactElement {
               <button type="submit" disabled={!lv.date} className="h-12 rounded-xl bg-brand text-white font-semibold disabled:opacity-40">신청 보내기</button>
               <p className="text-xs text-ink-3">담당자가 승인하면 그날 표에 반영되고 알림으로 알려 드립니다.</p>
             </form>
+          )}
+          <button onClick={() => setUnOpen((v) => !v)} className="h-12 rounded-xl border border-brand text-brand bg-white font-semibold">{unOpen ? '닫기' : '+ 못 나오는 날·요일 미리 알리기'}</button>
+          {unOpen && (
+            <form onSubmit={submitUnavailable} className="rounded-xl border border-line p-4 flex flex-col gap-3 bg-white">
+              <label className="flex flex-col gap-1 text-sm text-ink-2">종류
+                <div className="flex gap-2">{(['날짜', '요일'] as const).map((k) => <button type="button" key={k} onClick={() => setUn({ ...un, kind: k })} className={`h-10 flex-1 rounded-md border text-[15px] font-semibold ${un.kind === k ? 'border-brand bg-brand-soft text-brand' : 'border-line'}`}>{k === '날짜' ? '특정 날' : '매주 요일'}</button>)}</div>
+              </label>
+              {un.kind === '날짜'
+                ? <label htmlFor="un-date" className="flex flex-col gap-1 text-sm text-ink-2">날짜<input id="un-date" type="date" required value={un.date} min={d.today} onChange={(e) => setUn({ ...un, date: e.target.value })} className="h-11 px-3 rounded-md border border-line text-[15px]" /></label>
+                : <label className="flex flex-col gap-1 text-sm text-ink-2">요일
+                    <div className="flex gap-1">{['일', '월', '화', '수', '목', '금', '토'].map((w, i) => <button type="button" key={w} onClick={() => setUn({ ...un, weekday: i })} className={`h-10 flex-1 rounded-md border text-[15px] font-semibold ${un.weekday === i ? 'border-brand bg-brand-soft text-brand' : 'border-line'}`}>{w}</button>)}</div>
+                  </label>}
+              <label className="flex flex-col gap-1 text-sm text-ink-2">근무
+                <div className="flex gap-2">{([['', '주·야 모두'], ['주간', '주간만'], ['야간', '야간만']] as const).map(([v, t]) => <button type="button" key={v} onClick={() => setUn({ ...un, shift: v })} className={`h-10 flex-1 rounded-md border text-[15px] font-semibold ${un.shift === v ? 'border-brand bg-brand-soft text-brand' : 'border-line'}`}>{t}</button>)}</div>
+              </label>
+              <label htmlFor="un-note" className="flex flex-col gap-1 text-sm text-ink-2">사유 (선택)<input id="un-note" value={un.note} onChange={(e) => setUn({ ...un, note: e.target.value })} placeholder="예: 매주 수요일 야간 학원" className="h-11 px-3 rounded-md border border-line text-[15px]" /></label>
+              <button type="submit" disabled={un.kind === '날짜' && !un.date} className="h-12 rounded-xl bg-brand text-white font-semibold disabled:opacity-40">알리기</button>
+              <p className="text-xs text-ink-3">담당자가 승인하면 다음 달 근무표를 짤 때 그 날·요일은 빼 줍니다. 이미 짜 둔 표는 바뀌지 않으니 그건 휴가 신청으로 해 주세요.</p>
+            </form>
+          )}
+          {(d.unavailable ?? []).length > 0 && (
+            <ul className="divide-y divide-line rounded-xl border border-line bg-white">
+              {(d.unavailable ?? []).map((u) => (
+                <li key={`u${u.id}`} className="px-3 py-2.5 flex items-center gap-2 text-[15px]"><span className="shrink-0">{u.kind === '날짜' ? fmtShort(u.date!) : `매주 ${['일', '월', '화', '수', '목', '금', '토'][u.weekday!]}요일`}{u.shift ? ` ${u.shift}` : ''}</span><span className="text-xs text-ink-3 truncate">{u.note ?? '불가'}</span><span className={`ml-auto text-sm font-semibold ${u.status === '승인' ? 'text-ok' : u.status === '거절' ? 'text-vac' : 'text-wait'}`}>{u.status}</span></li>
+              ))}
+            </ul>
           )}
           {d.leaves.length > 0 && (
             <ul className="divide-y divide-line rounded-xl border border-line bg-white">

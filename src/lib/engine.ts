@@ -1,6 +1,6 @@
 import { groupsOn, type Shift } from './shift';
 
-export type Person = { id: number; name: string; grp: string; work_type: '교대' | '주간고정' | '임시'; active: number };
+export type Person = { id: number; name: string; grp: string; work_type: '교대' | '주간고정' | '임시'; active: number; role?: string | null };
 export type Experience = { personId: number; postId: number; product: string | null; count: number };
 export type Candidate = { personId: number; name: string; score: number; reasons: string[] };
 /** 사람별·라인별 숙련도. 불가면 후보에서 빠지고, 숙련이면 앞에 선다. 정하지 않은 라인은 과거 기록으로만 본다. */
@@ -80,4 +80,37 @@ export function typicalHeadcount(counts: number[], fallback = 1): number {
   let best = fallback, bestF = 0;
   for (const [c, f] of freq) if (f > bestF || (f === bestF && c > best)) { best = c; bestF = f; }
   return Math.min(4, Math.max(1, best));
+}
+
+/** 월 근무표 짜기용 자리 점수. 그날 출근하는 사람(근무조·주간고정·임시) 중에서 한 자리에 세울 사람을 고른다.
+ *  불가 라인은 제외, 숙련·경험은 가산, 이번 달 야간·주말·배치 횟수가 많을수록 감점해 형평을 맞춘다. */
+export type SlotCounters = { shifts: number; nights: number; weekends: number };
+export function rankForSlot(i: {
+  postId: number; product: string | null; pool: Person[]; experience: Experience[]; skills?: SkillMap;
+  counters: Map<number, SlotCounters>; isNight: boolean; isWeekend: boolean; fairNight: boolean; fairWeekend: boolean;
+  /** 직책 자리면 그 자리를 가장 많이 맡았던 사람을 우선 */
+  fixedPreference?: Map<number, number>;
+}): { personId: number; score: number; reason: string }[] {
+  const byP = new Map<number, Experience[]>();
+  for (const e of i.experience) { if (!byP.has(e.personId)) byP.set(e.personId, []); byP.get(e.personId)!.push(e); }
+  const out: { personId: number; score: number; reason: string }[] = [];
+  for (const p of i.pool) {
+    const lv = i.skills?.get(p.id)?.get(i.postId);
+    if (lv === '불가') continue;
+    const rows = byP.get(p.id) ?? [];
+    const post = rows.filter((r) => r.postId === i.postId).reduce((s, r) => s + r.count, 0);
+    const prod = i.product ? rows.filter((r) => r.product === i.product).reduce((s, r) => s + r.count, 0) : 0;
+    const c = i.counters.get(p.id) ?? { shifts: 0, nights: 0, weekends: 0 };
+    let score = post * 10 + prod * 3 + (lv === '숙련' ? 40 : lv === '가능' ? 5 : 0) + (i.fixedPreference?.get(p.id) ?? 0) * 50;
+    const why: string[] = [];
+    if (lv) why.push(lv === '숙련' ? '이 라인 숙련' : '이 라인 가능');
+    if (post) why.push(`이 라인 ${post}회`);
+    if (prod) why.push(`같은 제품 ${prod}회`);
+    if (i.fairNight && i.isNight) { score -= c.nights * 4; if (c.nights) why.push(`이번 달 야간 ${c.nights}회`); }
+    if (i.fairWeekend && i.isWeekend) { score -= c.weekends * 4; if (c.weekends) why.push(`이번 달 주말 ${c.weekends}회`); }
+    score -= c.shifts; // 같은 조건이면 이번 달 덜 선 사람부터
+    out.push({ personId: p.id, score, reason: why.join(' · ') || '이번 달 배치 적음' });
+  }
+  out.sort((a, b) => b.score - a.score || a.personId - b.personId);
+  return out;
 }

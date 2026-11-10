@@ -266,7 +266,7 @@ describe('근태표 기간', () => {
 describe('설정', () => {
   it('기본값은 20분·12시간·52시간이고, 저장하면 요청 만료에 쓰인다', () => {
     const db = memDb();
-    expect(getSettings(db)).toEqual({ expiry_minutes: 20, shift_hours: 12, week_max_hours: 52 });
+    expect(getSettings(db)).toEqual({ expiry_minutes: 20, shift_hours: 12, week_max_hours: 52, max_consecutive_days: 6, fair_night: 1, fair_weekend: 1 });
     expect(setSettings({ expiry_minutes: 45 }, db).expiry_minutes).toBe(45);
     expect(() => setSettings({ week_max_hours: 3 }, db)).toThrow();
     db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (3,'2026-10-14','주간',2,'확정')").run();

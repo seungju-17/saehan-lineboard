@@ -10,6 +10,7 @@ import { toggleRail, useRailWide } from '@/lib/rail-state';
 /** 시프티식 틀: 위에 흰 막대(≡, 로고, 이름·역할, 근무자 화면, 나가기), 왼쪽에 진한 남색 아이콘 띠. ≡ 로 띠를 넓히거나 좁힌다. */
 const ITEMS: { href: string; label: string; icon: React.ReactNode }[] = [
   { href: '/today', label: '오늘 배치', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" /></svg> },
+  { href: '/month', label: '월 근무표', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4M7 13h3M14 13h3M7 17h3M14 17h3" /></svg> },
   { href: '/dashboard', label: '현황', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg> },
   { href: '/requests', label: '대체 요청', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h13l-3-3M20 17H7l3 3" /></svg> },
   { href: '/inbox', label: '알림', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4" /></svg> },

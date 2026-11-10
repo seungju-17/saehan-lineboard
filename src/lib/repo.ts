@@ -1,13 +1,13 @@
 import crypto from 'node:crypto';
 import { getDb, type DB } from './db';
-import { addDays, groupsOn, sameGroupBefore, weekRange, type Shift, todaySeoul } from './shift';
+import { addDays, groupsOn, sameGroupBefore, weekRange, type Shift, todaySeoul, fmtKo } from './shift';
 import { defaultPassword, hashPassword } from './auth';
 import { aggregateExperience, typicalHeadcount, assignmentMessage, rankCandidates, requestMessage, type Person, type SkillLevel, type SkillMap } from './engine';
 
 export type Factory = { id: number; code: string; name: string };
 export type Post = { id: number; factory_id: number; code: string; name: string; kind: string; sort: number; zone: string; unmanned: number; fixed: number };
 export type PersonRow = Person & { affiliation: string | null; role: string | null; gender: string | null; phone: string | null; home_factory_id: number | null; unit: string };
-export type Assignment = { id: number; post_id: number; person_id: number; source: string; name: string; affiliation: string | null; grp: string; work_type: string; gender: string | null; home_factory_id: number | null; unit: string };
+export type Assignment = { id: number; post_id: number; person_id: number; source: string; reason: string | null; name: string; affiliation: string | null; grp: string; work_type: string; gender: string | null; home_factory_id: number | null; unit: string };
 export type AttendanceRow = { person_id: number; kind: string; note: string | null; name: string };
 import { DEFAULT_SETTINGS, SETTING_RANGE, VACATING_KINDS, OPTIONAL_KINDS, LEAVE_KINDS, isVacantPost, type AttendanceKind, type LeaveKind, type Settings, type Role } from './rules';
 export { ATTENDANCE_KINDS, DEFAULT_SETTINGS, VACATING_KINDS, OPTIONAL_KINDS, LEAVE_KINDS, isVacantPost, needFor, CAN, type AttendanceKind, type LeaveKind, type Settings, type VacancyInput, type Role } from './rules';
@@ -121,7 +121,7 @@ export function getBoard(date: string, shift: Shift, factoryId: number, db: DB =
   const b = boardRow(date, shift, factoryId, db)!;
   const ps = posts(factoryId, db);
   const bp = new Map((db.prepare('SELECT post_id, product, vacant, stopped, need FROM board_posts WHERE board_id=?').all(id) as { post_id: number; product: string | null; vacant: number; stopped: number; need: number | null }[]).map((r) => [r.post_id, r]));
-  const assignments = db.prepare(`SELECT a.id, a.post_id, a.person_id, a.source, p.name, p.affiliation, p.grp, p.work_type, p.gender, p.home_factory_id, p.unit
+  const assignments = db.prepare(`SELECT a.id, a.post_id, a.person_id, a.source, a.reason, p.name, p.affiliation, p.grp, p.work_type, p.gender, p.home_factory_id, p.unit
     FROM assignments a JOIN people p ON p.id=a.person_id WHERE a.board_id=? ORDER BY a.id`).all(id) as Assignment[];
   const requests = requestsFor(`r.board_id=${id}`, db);
   const attendance = db.prepare('SELECT t.person_id, t.kind, t.note, p.name FROM attendance t JOIN people p ON p.id=t.person_id WHERE t.date=? AND t.shift=? ORDER BY t.id').all(date, shift) as AttendanceRow[];
@@ -308,9 +308,10 @@ export function decideLeave(id: number, approve: boolean, reply: string | null, 
 
 /** 관리자 알림함: 처리할 휴가 신청과 최근 일(수락·거절·신청) */
 export type InboxEvent = { at: string; kind: '수락' | '거절' | '만료' | '휴가신청' | '휴가승인' | '휴가거절'; text: string; link: string };
-export function adminInbox(db: DB = getDb()): { pending: LeaveRow[]; events: InboxEvent[] } {
+export function adminInbox(db: DB = getDb()): { pending: LeaveRow[]; pendingUnavail: UnavailRow[]; events: InboxEvent[] } {
   expireDue(db);
   const pending = pendingLeaves(db);
+  const pendingUnavail = pendingUnavailable(db);
   const resp = db.prepare(`SELECT r.status, r.responded_at, p.name, po.code, b.date, b.shift, b.factory_id FROM requests r JOIN people p ON p.id=r.person_id JOIN posts po ON po.id=r.post_id JOIN boards b ON b.id=r.board_id
     WHERE r.responded_at IS NOT NULL AND r.status IN ('수락','거절') AND r.responded_at >= datetime('now','localtime','-7 days') ORDER BY r.responded_at DESC LIMIT 60`).all() as { status: '수락' | '거절'; responded_at: string; name: string; code: string; date: string; shift: Shift; factory_id: number }[];
   const md = (d: string): string => `${+d.slice(5, 7)}/${+d.slice(8, 10)}`;
@@ -319,7 +320,7 @@ export function adminInbox(db: DB = getDb()): { pending: LeaveRow[]; events: Inb
     events.push({ at: l.status === '신청' ? l.created_at : (l.decided_at ?? l.created_at), kind: l.status === '신청' ? '휴가신청' : l.status === '승인' ? '휴가승인' : '휴가거절', text: `${l.name} ${l.kind} ${l.status === '신청' ? '신청' : l.status} · ${md(l.date)} ${l.shift}${l.note ? ' · ' + l.note : ''}`, link: '/inbox' });
   }
   events.sort((x, y) => (x.at < y.at ? 1 : -1));
-  return { pending, events: events.slice(0, 80) };
+  return { pending, pendingUnavail, events: events.slice(0, 80) };
 }
 
 export function setProduct(boardId: number, postId: number, product: string | null, db: DB = getDb()): void {
@@ -328,6 +329,9 @@ export function setProduct(boardId: number, postId: number, product: string | nu
   // 제품이 바뀌면 그 제품으로 섰던 날의 인원을 필요 인원으로 제안한다
   if (product && product !== (before?.product ?? null)) {
     const b = db.prepare('SELECT date, factory_id FROM boards WHERE id=?').get(boardId) as { date: string; factory_id: number };
+    // 제품별 표준 인원이 정해져 있으면 그 값을 쓴다
+    const std = db.prepare('SELECT need FROM products WHERE factory_id=? AND name=?').get(b.factory_id, product) as { need: number } | undefined;
+    if (std) { db.prepare('UPDATE board_posts SET need=? WHERE board_id=? AND post_id=?').run(std.need, boardId, postId); return; }
     const counts = (db.prepare(`SELECT COUNT(*) c FROM assignments a JOIN boards bo ON bo.id=a.board_id JOIN board_posts bp ON bp.board_id=a.board_id AND bp.post_id=a.post_id
       WHERE a.post_id=? AND bp.product=? AND bo.date>=? AND bo.date<? GROUP BY a.board_id`).all(postId, product, addDays(b.date, -365), b.date) as { c: number }[]).map((r) => r.c);
     if (counts.length) db.prepare('UPDATE board_posts SET need=? WHERE board_id=? AND post_id=?').run(typicalHeadcount(counts, 1), boardId, postId);
@@ -340,7 +344,101 @@ export function addPerson(boardId: number, postId: number, personId: number, sou
   if (source === '수동' || source === '복사') db.prepare('UPDATE board_posts SET vacant=0, need=CASE WHEN need IS NOT NULL AND need < ? THEN ? ELSE need END WHERE board_id=? AND post_id=?').run(countAt(boardId, postId, db), countAt(boardId, postId, db), boardId, postId);
   else db.prepare('UPDATE board_posts SET vacant=0 WHERE board_id=? AND post_id=?').run(boardId, postId);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action) VALUES (?,?,?,'추가')").run(boardId, postId, personId);
+  notifyIfConfirmed(boardId, postId, personId, 'in', db);
 }
+/** 확정(알림을 보낸) 표를 고치면 해당 근무자에게 바로 변경 알림. 확정 전에는 보내지 않는다. */
+function notifyIfConfirmed(boardId: number, postId: number, personId: number, dir: 'in' | 'out', db: DB): void {
+  const b = db.prepare('SELECT date, shift, factory_id, status FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift; factory_id: number; status: string } | undefined;
+  if (!b || b.status !== '확정') return;
+  const post = db.prepare('SELECT name FROM posts WHERE id=?').get(postId) as { name: string };
+  const product = (db.prepare('SELECT product FROM board_posts WHERE board_id=? AND post_id=?').get(boardId, postId) as { product: string | null } | undefined)?.product ?? null;
+  const fac = factoryName(b.factory_id, db);
+  const body = dir === 'in' ? assignmentMessage({ date: b.date, shift: b.shift, factory: fac, post: post.name, product, changed: true })
+    : `[배치 변경] ${+b.date.slice(5, 7)}/${+b.date.slice(8, 10)} ${b.shift} ${fac} ${post.name}에서 빠졌습니다`;
+  sendMessage(personId, '변경', body, `/me`, db);
+}
+
+/** 제품별 표준 인원. 최근 1년 표에 나온 제품마다 정해 둔 인원과 기록에서 본 보통 인원을 함께 준다. */
+export type ProductRow = { name: string; need: number | null; typical: number; times: number };
+export function listProducts(factoryId: number, db: DB = getDb()): ProductRow[] {
+  const rows = db.prepare(`SELECT bp.product name, COUNT(*) times FROM board_posts bp JOIN boards b ON b.id=bp.board_id JOIN posts po ON po.id=bp.post_id
+    WHERE b.factory_id=? AND bp.product IS NOT NULL AND bp.product<>'' AND po.kind='machine' AND po.unmanned=0 AND b.date>=? GROUP BY bp.product ORDER BY times DESC, bp.product`).all(factoryId, addDays(todaySeoul(), -365)) as { name: string; times: number }[];
+  const std = new Map((db.prepare('SELECT name, need FROM products WHERE factory_id=?').all(factoryId) as { name: string; need: number }[]).map((r) => [r.name, r.need]));
+  return rows.map((r) => {
+    const counts = (db.prepare(`SELECT COUNT(DISTINCT a.person_id) c FROM assignments a JOIN boards bo ON bo.id=a.board_id JOIN board_posts bp ON bp.board_id=a.board_id AND bp.post_id=a.post_id
+      WHERE bo.factory_id=? AND bp.product=? GROUP BY a.board_id, a.post_id`).all(factoryId, r.name) as { c: number }[]).map((x) => x.c);
+    return { name: r.name, need: std.get(r.name) ?? null, typical: typicalHeadcount(counts, 1), times: r.times };
+  });
+}
+export function setProductNeed(factoryId: number, name: string, need: number | null, db: DB = getDb()): void {
+  if (need === null) { db.prepare('DELETE FROM products WHERE factory_id=? AND name=?').run(factoryId, name); return; }
+  if (!Number.isInteger(need) || need < 0 || need > 20) throw new Error('표준 인원은 0~20 사이여야 합니다');
+  db.prepare('INSERT INTO products (factory_id, name, need) VALUES (?,?,?) ON CONFLICT(factory_id, name) DO UPDATE SET need=excluded.need').run(factoryId, name, need);
+}
+
+/** 근무자가 미리 알리는 불가일: 특정 날짜 또는 매주 요일(0=일 … 6=토), 교대는 비우면 둘 다. 담당자가 승인하면 월 근무표를 짤 때 뺀다. */
+export type UnavailRow = { id: number; person_id: number; name: string; grp: string; work_type: string; kind: '날짜' | '요일'; date: string | null; weekday: number | null; shift: Shift | null; note: string | null; status: '신청' | '승인' | '거절'; reply: string | null; created_at: string };
+export function requestUnavailable(personId: number, r: { kind: '날짜' | '요일'; date?: string | null; weekday?: number | null; shift?: Shift | null; note?: string | null }, db: DB = getDb()): { ok: boolean; message: string; id?: number } {
+  if (r.kind === '날짜' && !/^\d{4}-\d{2}-\d{2}$/.test(r.date ?? '')) return { ok: false, message: '날짜를 골라 주세요' };
+  if (r.kind === '요일' && !(Number.isInteger(r.weekday) && (r.weekday as number) >= 0 && (r.weekday as number) <= 6)) return { ok: false, message: '요일을 골라 주세요' };
+  const dup = db.prepare("SELECT id FROM unavailable WHERE person_id=? AND kind=? AND COALESCE(date,'')=COALESCE(?, '') AND COALESCE(weekday,-1)=COALESCE(?,-1) AND COALESCE(shift,'')=COALESCE(?, '') AND status<>'거절'").get(personId, r.kind, r.date ?? null, r.weekday ?? null, r.shift ?? null);
+  if (dup) return { ok: false, message: '이미 신청한 내용입니다' };
+  const id = Number(db.prepare('INSERT INTO unavailable (person_id, kind, date, weekday, shift, note) VALUES (?,?,?,?,?,?)').run(personId, r.kind, r.kind === '날짜' ? r.date : null, r.kind === '요일' ? r.weekday : null, r.shift ?? null, r.note?.trim() || null).lastInsertRowid);
+  return { ok: true, message: '신청했습니다. 담당자가 확인하면 알려 드립니다.', id };
+}
+const UNAVAIL_SELECT = 'SELECT u.*, p.name, p.grp, p.work_type FROM unavailable u JOIN people p ON p.id=u.person_id';
+export function myUnavailable(personId: number, db: DB = getDb()): UnavailRow[] { return db.prepare(`${UNAVAIL_SELECT} WHERE u.person_id=? ORDER BY u.created_at DESC LIMIT 30`).all(personId) as UnavailRow[]; }
+export function pendingUnavailable(db: DB = getDb()): UnavailRow[] { return db.prepare(`${UNAVAIL_SELECT} WHERE u.status='신청' ORDER BY u.created_at`).all() as UnavailRow[]; }
+export function decideUnavailable(id: number, approve: boolean, reply: string | null, by: string, db: DB = getDb()): { ok: boolean; message: string } {
+  const r = db.prepare(`${UNAVAIL_SELECT} WHERE u.id=?`).get(id) as UnavailRow | undefined;
+  if (!r || r.status !== '신청') return { ok: false, message: '이미 처리된 신청입니다' };
+  db.prepare("UPDATE unavailable SET status=?, reply=?, decided_by=?, decided_at=datetime('now','localtime') WHERE id=?").run(approve ? '승인' : '거절', reply?.trim() || null, by, id);
+  const what = describeUnavail(r);
+  sendMessage(r.person_id, '근태', `[불가일 ${approve ? '승인' : '거절'}] ${what}${reply?.trim() ? ` — ${reply.trim()}` : ''}`, '/me', db);
+  return { ok: true, message: approve ? `승인했습니다. 근무표를 짤 때 ${what}은 뺍니다.` : '거절했습니다.' };
+}
+const WD = ['일', '월', '화', '수', '목', '금', '토'];
+export function describeUnavail(r: { kind: '날짜' | '요일'; date: string | null; weekday: number | null; shift: Shift | null }): string {
+  const sh = r.shift ? ` ${r.shift}` : '';
+  return r.kind === '날짜' ? `${fmtKo(r.date!)}${sh}` : `매주 ${WD[r.weekday!]}요일${sh}`;
+}
+/** 승인된 불가일 규칙을 빠르게 보려고 사람별로 묶는다 */
+export function approvedUnavailable(db: DB = getDb()): Map<number, UnavailRow[]> {
+  const m = new Map<number, UnavailRow[]>();
+  for (const r of db.prepare(`${UNAVAIL_SELECT} WHERE u.status='승인'`).all() as UnavailRow[]) m.set(r.person_id, [...(m.get(r.person_id) ?? []), r]);
+  return m;
+}
+export function isUnavailable(rules: UnavailRow[] | undefined, date: string, shift: Shift): boolean {
+  if (!rules?.length) return false;
+  const wd = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return rules.some((r) => (r.shift === null || r.shift === shift) && ((r.kind === '날짜' && r.date === date) || (r.kind === '요일' && r.weekday === wd)));
+}
+
+/** 월 보기: 날짜 × 교대마다 표 상태·인원·빈 자리·자동 배치 수. 표가 없으면 status '없음'. */
+export type MonthCell = { date: string; shift: Shift; status: '없음' | '초안' | '확정'; planned: boolean; workers: number; vacant: number; auto: number };
+export function monthView(month: string, factoryId: number, db: DB = getDb()): MonthCell[] {
+  const y = +month.slice(0, 4), m = +month.slice(5, 7); const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const out: MonthCell[] = [];
+  for (let d = 1; d <= days; d++) for (const shift of ['주간', '야간'] as Shift[]) {
+    const date = `${month}-${String(d).padStart(2, '0')}`;
+    const b = boardRow(date, shift, factoryId, db);
+    if (!b) { out.push({ date, shift, status: '없음', planned: false, workers: 0, vacant: 0, auto: 0 }); continue; }
+    const full = getBoard(date, shift, factoryId, db);
+    const byPost = new Map<number, number>(); const seen = new Set<number>(); let auto = 0;
+    for (const a of full.assignments) { byPost.set(a.post_id, (byPost.get(a.post_id) ?? 0) + 1); seen.add(a.person_id); if (a.source === '자동') auto++; }
+    const vacant = full.posts.filter((p) => isVacantPost(p, byPost.get(p.id) ?? 0)).length;
+    const planned = full.posts.some((p) => p.product || (p.need ?? 0) > 0);
+    out.push({ date, shift, status: b.status === '확정' ? '확정' : '초안', planned, workers: seen.size, vacant, auto });
+  }
+  return out;
+}
+/** 이 달 확정: 사람이 들어 있는 표를 모두 확정하고 근무자에게 알림. 이미 확정된 표는 건너뛴다. */
+export function confirmMonth(month: string, factoryId: number, db: DB = getDb()): { boards: number; notified: number } {
+  const rows = db.prepare(`SELECT id FROM boards WHERE factory_id=? AND date LIKE ? AND status<>'확정' AND EXISTS (SELECT 1 FROM assignments a WHERE a.board_id=boards.id) ORDER BY date, shift`).all(factoryId, `${month}-%`) as { id: number }[];
+  let notified = 0; for (const r of rows) notified += confirmBoard(r.id, db).notified;
+  return { boards: rows.length, notified };
+}
+
 function ensureBp(boardId: number, postId: number, db: DB): void {
   db.prepare('INSERT INTO board_posts (board_id, post_id) VALUES (?,?) ON CONFLICT DO NOTHING').run(boardId, postId);
 }
@@ -348,6 +446,7 @@ function ensureBp(boardId: number, postId: number, db: DB): void {
 export function removePerson(boardId: number, postId: number, personId: number, absent: boolean, db: DB = getDb()): { stopped: boolean } {
   db.prepare('DELETE FROM assignments WHERE board_id=? AND post_id=? AND person_id=?').run(boardId, postId, personId);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action) VALUES (?,?,?,?)").run(boardId, postId, personId, absent ? '결근' : '빼기');
+  if (!absent) notifyIfConfirmed(boardId, postId, personId, 'out', db);
   ensureBp(boardId, postId, db);
   if (absent) return { stopped: false };
   const left = countAt(boardId, postId, db);
@@ -600,7 +699,7 @@ export function myWork(tok: string, db: DB = getDb()) {
     messages,
     openRequests: open.map((r) => ({ ...r, factory: facs.get(r.factory_id) ?? '' })),
     week: { from: w.from, to: w.to, shifts: weekShifts, hours: weekShifts * st.shift_hours, plannedShifts: weekPlanned, plannedHours: weekPlanned * st.shift_hours, max: st.week_max_hours, shiftHours: st.shift_hours },
-    attendance, leaves, workDays,
+    attendance, leaves, unavailable: myUnavailable(p.id, db), workDays,
   };
 }
 export function markRead(tok: string, messageId: number, db: DB = getDb()): boolean {

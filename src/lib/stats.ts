@@ -8,7 +8,8 @@ export type Stats = {
   date: string; shift: Shift; factory_id: number; days: number; since: string;
   baseline: { date: string; label: string } | null;
   kpis: Kpi[];
-  byLine: { code: string; avg: number; boards: number }[];
+  fairness: { name: string; grp: string; work_type: string; shifts: number; nights: number; weekends: number; subs: number }[];
+  month: string;
   composition: { label: string; count: number }[];
   funnel: { label: string; count: number }[];
   topSubs: { name: string; subs: number; accepted: number; declined: number; who: string }[];
@@ -60,10 +61,14 @@ export function getStats(date: string, shift: Shift, factoryId: number, days = 3
     { key: 'waiting', label: '요청 대기', value: now.waiting, unit: '건', delta: null, upIsGood: false },
   ];
 
-  const byLineRows = db.prepare(`SELECT po.code, AVG(c) avg, COUNT(*) boards FROM (
-      SELECT a.post_id, a.board_id, COUNT(*) c FROM assignments a JOIN boards b ON b.id=a.board_id WHERE b.factory_id=? AND b.date>=? AND b.date<? GROUP BY a.post_id, a.board_id
-    ) x JOIN posts po ON po.id=x.post_id WHERE po.kind='machine' GROUP BY po.code ORDER BY avg DESC, boards DESC LIMIT 8`).all(factoryId, since, date) as { code: string; avg: number; boards: number }[];
-  const byLine = byLineRows.map((r) => ({ code: r.code, avg: Math.round(r.avg * 10) / 10, boards: r.boards }));
+  // 형평 현황: 이번 달 사람별 교대 수·야간·주말·대체 투입 (이 공장 표 기준, 교대 인원만)
+  const month = date.slice(0, 7);
+  const fairRows = db.prepare(`SELECT p.name, p.grp, p.work_type, COUNT(DISTINCT b.date || b.shift) shifts,
+      COUNT(DISTINCT CASE WHEN b.shift='야간' THEN b.date END) nights,
+      COUNT(DISTINCT CASE WHEN CAST(strftime('%w', b.date) AS INTEGER) IN (0,6) THEN b.date || b.shift END) weekends,
+      COUNT(DISTINCT CASE WHEN a.source='대체' THEN b.date || b.shift END) subs
+    FROM assignments a JOIN boards b ON b.id=a.board_id JOIN people p ON p.id=a.person_id
+    WHERE b.factory_id=? AND b.date LIKE ? AND p.work_type<>'임시' GROUP BY p.id ORDER BY nights DESC, weekends DESC, shifts DESC, p.name LIMIT 40`).all(factoryId, `${month}-%`) as { name: string; grp: string; work_type: string; shifts: number; nights: number; weekends: number; subs: number }[];
 
   const comp = new Map<string, number>([['A조', 0], ['B조', 0], ['C조', 0], ['주간고정', 0], ['임시', 0]]);
   for (const a of today.assignments) {
@@ -93,5 +98,5 @@ export function getStats(date: string, shift: Shift, factoryId: number, days = 3
   for (const r of dailyRows) { const e = dm.get(r.date); if (e) { if (r.shift === '주간') e.day = r.c; else e.night = r.c; } }
   const daily = [...dm.entries()].map(([dt, v]) => ({ date: dt, ...v }));
 
-  return { date, shift, factory_id: factoryId, days, since, baseline, kpis, byLine, composition, funnel, topSubs, daily };
+  return { date, shift, factory_id: factoryId, days, since, baseline, kpis, fairness: fairRows, month, composition, funnel, topSubs, daily };
 }

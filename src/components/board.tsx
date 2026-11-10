@@ -67,7 +67,7 @@ export function Board(): React.ReactElement {
     } finally { setBusy(false); }
   }
 
-  const locked = board?.status === '확정';
+  const locked = false; // 확정은 「알림을 보낸 상태」일 뿐 잠그지 않는다. 확정 뒤 고치면 그 사람에게 변경 알림이 간다.
   const byPost = useMemo(() => {
     const m = new Map<number, BoardT['assignments']>();
     for (const a of board?.assignments ?? []) { if (!m.has(a.post_id)) m.set(a.post_id, []); m.get(a.post_id)!.push(a); }
@@ -94,10 +94,9 @@ export function Board(): React.ReactElement {
     for (const p of board?.posts ?? []) { const g = p.zone || '라인'; const last = out[out.length - 1]; if (last && last.name === g) last.posts.push(p); else out.push({ name: g, posts: [p] }); }
     return out;
   }, [board]);
-  // 두 공장 모두 한 단계: 팀장·담당자가 「확정」하면 표가 잠기고 근무자에게 알림이 간다. 월 근무표가 기본이라 입안 단계는 없다.
+  // 확정은 「월 근무표」 화면에서 달 단위로 한다. 여기서는 상태만 보여 준다.
   const session = useSession();
   const role = session?.kind === 'admin' ? session.role : undefined;
-  const mayDecide = CAN.confirm(role);
 
   /** 빈 자리 전부에 대체 요청. 표에 바로 넣지 않는다. 수락한 사람이 들어간다. */
   async function requestAll(): Promise<void> {
@@ -109,11 +108,16 @@ export function Board(): React.ReactElement {
       ? (r.skipped ? '빈 자리마다 이미 요청이 나가 있습니다. 답을 기다리는 중입니다.' : '요청 보낼 빈 자리가 없습니다.')
       : `${r.lines}개 라인에 요청 ${r.sent}건을 보냈습니다. 수락한 사람이 표에 들어갑니다.${nc}`);
   }
-  async function confirm(): Promise<void> {
-    if (!(await ask(`${total}명에게 알림을 보냅니다.`))) return;
-    const d = await act({ action: 'confirm' });
-    if (d) setFlash(`확정했습니다 · 알림 ${(d as BoardT & { notified: number }).notified}건`);
+  /** 그날 출근자 중에서 빈 라인을 채운다 (월 근무표 짜기와 같은 규칙). 사람이 직접 넣은 자리는 그대로. */
+  async function generateDay(): Promise<void> {
+    const d = await act({ action: 'generate_day', mode: 'fill' });
+    if (!d) return;
+    const r = d as BoardT & { filled: number; vacant: { code: string; missing: number }[]; unplaced: string[] };
+    const v = r.vacant.length ? ` 못 채운 자리: ${r.vacant.map((x) => `${x.code} ${x.missing}명`).join(', ')} → 「빈 자리 요청 보내기」로 쉬는 조에 요청하세요.` : '';
+    const u = r.unplaced.length ? ` 자리 없는 출근자: ${r.unplaced.join(', ')}.` : '';
+    setFlash(r.filled === 0 ? (r.vacant.length ? `채울 출근자가 없습니다.${v}` : '채울 빈 자리가 없습니다. 제품이나 필요 인원을 먼저 적어 주세요.') : `${r.filled}명을 자동 배치했습니다.${v}${u}`);
   }
+
   /** 요청을 보낸 뒤: 누구에게 갔는지 띄우고, 그 자리 말풍선을 열어 한 명씩 취소할 수 있게 한다. */
   function afterSend(p: PostT, d: BoardT, prefix = ''): void {
     const r = d as BoardT & SendResult;
@@ -155,7 +159,7 @@ export function Board(): React.ReactElement {
           </div>
           <div className="mt-1.5 text-sm text-ink-2 flex flex-wrap items-center gap-x-2">
             {board?.status === '확정'
-              ? <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded font-semibold text-ok bg-ok-bg"><i className="w-1.5 h-1.5 rounded-full bg-ok" />확정됨{board?.confirmed_at && <span className="font-normal">{board.confirmed_at.slice(11, 16)}</span>}</span>
+              ? <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded font-semibold text-ok bg-ok-bg"><i className="w-1.5 h-1.5 rounded-full bg-ok" />확정됨 · 알림 보냄{board?.confirmed_at && <span className="font-normal"> {board.confirmed_at.slice(5, 16)}</span>}</span>
               : <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded font-semibold text-ink-2 bg-chip"><i className="w-1.5 h-1.5 rounded-full bg-ink-3" />작성 중</span>}
             {board && <>
               <span>근무 <b className="text-ink">{total}</b>명{(men || women) ? <span className="text-ink-3"> (남 {men} · 여 {women})</span> : null}</span>
@@ -176,11 +180,7 @@ export function Board(): React.ReactElement {
           <a href={`/api/board/export?${q}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">엑셀</a>
           <a href={`/api/attendance/export?month=${date.slice(0, 7)}&factory=${factory}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">월 근태표</a>
           {!locked && <button onClick={requestAll} disabled={busy || vacantCount === 0} title="필요 인원보다 적은 라인마다 후보에게 대체 요청을 보냅니다" className="h-11 px-4 rounded-md border border-brand/30 bg-white text-[15px] font-semibold text-brand hover:border-brand hover:bg-brand-soft disabled:opacity-40">빈 자리 요청 보내기{vacantCount > 0 ? ` ${vacantCount}` : ''}</button>}
-          {locked
-            ? (mayDecide && <button onClick={() => act({ action: 'unconfirm' })} disabled={busy} className="h-11 px-4 rounded-md border border-line bg-white text-[15px] font-medium hover:border-ink-3">확정 해제</button>)
-            : mayDecide
-            ? <button onClick={confirm} disabled={busy || total === 0} className="h-11 px-5 rounded-md bg-brand text-white text-[15px] font-semibold hover:bg-brand-2 disabled:opacity-40">확정</button>
-            : <span className="h-11 px-4 inline-flex items-center rounded-md bg-chip text-[14px] text-ink-2">팀장·담당자가 확정합니다</span>}
+          <button onClick={generateDay} disabled={busy} title="그날 출근하는 사람(근무조·주간고정·임시) 중에서 비어 있는 라인을 숙련도·경험·형평 기준으로 채웁니다. 쉬는 조는 쓰지 않습니다." className="h-11 px-4 rounded-md border border-line bg-white text-[15px] font-semibold text-ink hover:border-ink-3 disabled:opacity-40">이 날 자동 배치</button>
         </div>
       </div>
 
@@ -250,11 +250,12 @@ export function Board(): React.ReactElement {
                             <button data-chip="person" disabled={locked} onClick={() => setPop({ kind: 'person', postId: p.id, personId: a.person_id })}
                               className={`h-8 px-3 rounded-[5px] text-sm font-semibold text-white disabled:cursor-default hover:brightness-110 ${a.source === '자동' ? 'ring-2 ring-inset ring-white/60' : a.source === '대체' ? 'ring-2 ring-inset ring-white/70' : ''}`}
                               style={{ background: a.source === '대체' ? '#2a9d6f' : groupColor(a.grp, a.work_type).ink, outline: a.source === '자동' ? '2px dashed rgba(255,255,255,.7)' : undefined, outlineOffset: '-3px' }}
-                              title={`${groupColor(a.grp, a.work_type).label || a.grp}${a.source === '대체' ? ' · 대체 투입' : a.source === '자동' ? ' · 자동 채우기' : ''}`}>
+                              title={`${groupColor(a.grp, a.work_type).label || a.grp}${a.source === '대체' ? ' · 대체 투입' : a.source === '자동' ? ' · 자동 배치' : ''}`}>
                               {a.name}{a.source === '대체' ? <span className="ml-1 text-[11px] font-normal text-white/85">대체</span> : null}{away ? <span className="ml-1 text-[11px] font-normal text-white/80">{a.home_factory_id}공장</span> : null}{att && <span className="ml-1 text-[11px] font-bold bg-white/90 text-vac px-1 rounded">{att.kind}</span>}
                             </button>
                             {pop?.kind === 'person' && pop.postId === p.id && pop.personId === a.person_id && (
                               <Pop ref={popRef} wide>
+                                {a.reason && <div className="px-3 pt-2 text-xs text-brand">자동 배치 · {a.reason}</div>}
                                 <div className="px-3 pt-2 pb-1.5 text-xs text-ink-3 border-b border-line-2">{[a.affiliation, a.unit, a.gender === 'M' ? '남' : a.gender === 'F' ? '여' : null].filter(Boolean).join(' · ') || '정보 없음'}{away ? ` · ${a.home_factory_id}공장 소속(지원)` : ''}</div>
                                 <div className="grid grid-cols-2">
                                   {ATTENDANCE_KINDS.map((k) => <PopBtn key={k} onClick={() => attend(p, a.person_id, a.name, k, ppl.length)} muted={att?.kind === k}>{k === '결근' ? '결근 처리' : k}{att?.kind === k ? ' ✓' : ''}</PopBtn>)}
@@ -334,7 +335,7 @@ export function Board(): React.ReactElement {
         {board && !locked && board.assignments.length === 0 && board.posts.every((p) => !p.product) && (
           <div className="px-5 py-4 border-t border-line-2 bg-wait-bg/40 text-[14px]">
             <span className="font-semibold text-ink">받은 근무표가 없는 날입니다.</span>
-            <span className="ml-2 text-ink-2">{CAN.manage(role) ? <>왼쪽 메뉴 <Link href="/settings" className="text-brand underline">설정 → 월 근무표 올리기</Link>에서 이 달 표를 올리면 채워집니다. 급하면 라인의 「+」로 직접 넣을 수도 있습니다.</> : '담당자가 월 근무표를 올리면 채워집니다.'}</span>
+            <span className="ml-2 text-ink-2">{CAN.manage(role) ? <><Link href="/month" className="text-brand underline">월 근무표</Link>에서 생산 계획을 올리고 「이 달 근무표 짜기」를 누르면 채워집니다. 급하면 라인의 「+」로 직접 넣을 수도 있습니다.</> : '담당자가 월 근무표를 짜면 채워집니다.'}</span>
           </div>
         )}
         {board?.copied_from && board.status === '초안' && board.assignments.every((a) => a.source === '복사') && (

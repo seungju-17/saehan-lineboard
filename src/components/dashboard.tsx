@@ -62,8 +62,8 @@ export function Dashboard(): React.ReactElement {
 
           {/* 2줄: 라인별 인원 + 근무자 구성 */}
           <div className="grid gap-3 lg:grid-cols-[3fr_2fr]">
-            <Card title={`라인별 평균 근무 인원`} sub={`최근 ${s.days}일, 가동한 날 기준`}>
-              {s.byLine.length === 0 ? <Empty>기간 안에 가동한 라인이 없습니다.</Empty> : <HBars rows={s.byLine.map((r) => ({ label: r.code, value: r.avg, note: `${r.boards}회 가동` }))} unit="명" />}
+            <Card title="형평 현황" sub={`${+s.month.slice(5, 7)}월 · 사람별 교대·야간·주말·대체 (임시 제외)`}>
+              {s.fairness.length === 0 ? <Empty>이 달에 짠 표가 없습니다.</Empty> : <Fairness rows={s.fairness} />}
             </Card>
             <Card title="오늘 근무자 구성" sub={`${s.kpis[0].value}명`}>
               <Segmented parts={s.composition} />
@@ -152,6 +152,26 @@ function TodayBoard({ b }: { b: Board }): React.ReactElement {
   );
 }
 
+/** 사람별 이번 달 교대·야간·주말·대체 횟수. 야간이 많은 순. 막대는 야간 수. */
+function Fairness({ rows }: { rows: Stats['fairness'] }): React.ReactElement {
+  const max = Math.max(1, ...rows.map((r) => r.nights));
+  const avg = (k: 'shifts' | 'nights' | 'weekends') => rows.length ? Math.round((rows.reduce((t, r) => t + r[k], 0) / rows.length) * 10) / 10 : 0;
+  return (
+    <div>
+      <div className="mb-2 text-[12px] text-ink-3">평균 교대 {avg('shifts')} · 야간 {avg('nights')} · 주말 {avg('weekends')}</div>
+      <ul className="flex flex-col gap-1 max-h-72 overflow-auto pr-1">
+        {rows.map((r) => (
+          <li key={r.name} className="grid grid-cols-[4.5rem_1fr_auto] items-center gap-2 text-[13px]">
+            <span className="truncate"><i className="inline-block w-2 h-2 rounded-sm mr-1 align-middle" style={{ background: groupColor(r.grp, r.work_type).ink }} />{r.name}</span>
+            <span className="h-2 rounded bg-chip overflow-hidden"><span className="block h-full rounded" style={{ width: `${(r.nights / max) * 100}%`, background: SERIES[4] }} /></span>
+            <span className="tabular-nums text-ink-2 whitespace-nowrap">교대 {r.shifts} · 야 {r.nights} · 주말 {r.weekends}{r.subs ? ` · 대체 ${r.subs}` : ''}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }): React.ReactElement {
   return (
     <section className="bg-white border border-line rounded-xl p-4 min-w-0">
@@ -163,20 +183,6 @@ function Card({ title, sub, children }: { title: string; sub?: string; children:
 function Empty({ children }: { children: React.ReactNode }): React.ReactElement { return <p className="py-8 text-center text-[14px] text-ink-3">{children}</p>; }
 
 /** 가로 막대: 한 계열, 한 색, 값은 글자색으로 직접 표기 */
-function HBars({ rows, unit }: { rows: { label: string; value: number; note?: string }[]; unit: string }): React.ReactElement {
-  const max = Math.max(...rows.map((r) => r.value), 1);
-  return (
-    <ul className="flex flex-col gap-2">
-      {rows.map((r) => (
-        <li key={r.label} className="grid grid-cols-[3.5rem_1fr_auto] items-center gap-2 text-[14px]" title={`${r.label} 평균 ${r.value}${unit}${r.note ? ` · ${r.note}` : ''}`}>
-          <span className="font-medium truncate">{r.label}</span>
-          <span className="h-[18px] rounded-r bg-line-2 overflow-hidden"><span className="block h-full rounded-r" style={{ width: `${(r.value / max) * 100}%`, background: SERIES[0] }} /></span>
-          <span className="tabular-nums w-16 text-right">{r.value}<span className="text-ink-3 text-[12px]">{unit}</span></span>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 /** 세로로 두툼한 분할 막대: 부분-전체를 한눈에. 도넛 대신. */
 /** 근무자 구성 색은 배치표의 조 색과 같다 (A 파랑, B 초록, C 주황, 주간고정 갈색, 임시 회색) */

@@ -51,6 +51,11 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   reply TEXT, decided_by TEXT, created_at TEXT DEFAULT (datetime('now','localtime')), decided_at TEXT);
 CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL CHECK (role IN ('팀장','담당자','반장')), factory_id INTEGER, password_hash TEXT NOT NULL, active INTEGER DEFAULT 1);
 CREATE TABLE IF NOT EXISTS skills (person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id), level TEXT NOT NULL CHECK (level IN ('불가','가능','숙련')), PRIMARY KEY (person_id, post_id));
+CREATE TABLE IF NOT EXISTS products (factory_id INTEGER NOT NULL REFERENCES factories(id), name TEXT NOT NULL, need INTEGER NOT NULL, PRIMARY KEY (factory_id, name));
+CREATE TABLE IF NOT EXISTS unavailable (
+  id INTEGER PRIMARY KEY, person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE, kind TEXT NOT NULL CHECK (kind IN ('날짜','요일')),
+  date TEXT, weekday INTEGER, shift TEXT CHECK (shift IN ('주간','야간')), note TEXT, status TEXT NOT NULL DEFAULT '신청' CHECK (status IN ('신청','승인','거절')),
+  reply TEXT, decided_by TEXT, created_at TEXT DEFAULT (datetime('now','localtime')), decided_at TEXT);
 `;
 
 export type DB = Database.Database;
@@ -67,6 +72,8 @@ export function openDb(file: string): DB {
   if (!cols.includes('need')) d.exec('ALTER TABLE board_posts ADD COLUMN need INTEGER');
   const bcols = (d.prepare('PRAGMA table_info(boards)').all() as { name: string }[]).map((c) => c.name);
   if (!bcols.includes('return_note')) d.exec('ALTER TABLE boards ADD COLUMN return_note TEXT');
+  const acols = (d.prepare('PRAGMA table_info(assignments)').all() as { name: string }[]).map((c) => c.name);
+  if (!acols.includes('reason')) d.exec('ALTER TABLE assignments ADD COLUMN reason TEXT'); // 자동 배치 이유
   // messages.kind 제약에 '근태'가 없는 옛 파일은 표를 다시 만든다
   const msgSql = (d.prepare("SELECT sql FROM sqlite_master WHERE name='messages'").get() as { sql: string } | undefined)?.sql ?? '';
   if (msgSql && !msgSql.includes("'근태'")) d.exec("ALTER TABLE messages RENAME TO messages_old; CREATE TABLE messages (id INTEGER PRIMARY KEY, person_id INTEGER NOT NULL REFERENCES people(id), kind TEXT NOT NULL CHECK (kind IN ('배치','변경','요청','근태')), body TEXT NOT NULL, link TEXT, channel TEXT NOT NULL DEFAULT '데모', sent_at TEXT DEFAULT (datetime('now','localtime')), read_at TEXT); INSERT INTO messages SELECT * FROM messages_old; DROP TABLE messages_old; CREATE INDEX IF NOT EXISTS idx_msg_person ON messages(person_id, sent_at);");

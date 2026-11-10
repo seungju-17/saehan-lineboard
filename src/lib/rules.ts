@@ -22,9 +22,9 @@ export function needFor(p: VacancyInput, count: number): number {
 export function isVacantPost(p: VacancyInput, count: number): boolean { return count < needFor(p, count); }
 
 /** 설정값. 없으면 기본값(근로기준법 주 52시간, 12시간 교대, 요청 만료 20분) */
-export type Settings = { expiry_minutes: number; shift_hours: number; week_max_hours: number };
-export const DEFAULT_SETTINGS: Settings = { expiry_minutes: 20, shift_hours: 12, week_max_hours: 52 };
-export const SETTING_RANGE: Record<keyof Settings, [number, number]> = { expiry_minutes: [5, 240], shift_hours: [4, 24], week_max_hours: [12, 84] };
+export type Settings = { expiry_minutes: number; shift_hours: number; week_max_hours: number; max_consecutive_days: number; fair_night: number; fair_weekend: number };
+export const DEFAULT_SETTINGS: Settings = { expiry_minutes: 20, shift_hours: 12, week_max_hours: 52, max_consecutive_days: 6, fair_night: 1, fair_weekend: 1 };
+export const SETTING_RANGE: Record<keyof Settings, [number, number]> = { expiry_minutes: [5, 240], shift_hours: [4, 24], week_max_hours: [12, 84], max_consecutive_days: [2, 14], fair_night: [0, 1], fair_weekend: [0, 1] };
 
 /** 역할과 권한. 2공장 결정은 팀장만, 1공장 확정은 팀장·담당자, 직원·설정은 팀장·담당자. */
 export type Role = '팀장' | '담당자' | '반장';

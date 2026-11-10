@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ME_COOKIE, parseMe } from '@/lib/auth';
-import { markRead, myWork, personByToken, requestLeave } from '@/lib/repo';
+import { markRead, myWork, personByToken, requestLeave, requestUnavailable } from '@/lib/repo';
 import type { LeaveKind } from '@/lib/rules';
 import type { Shift } from '@/lib/shift';
 
@@ -14,12 +14,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json(data);
 }
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const body = await req.json() as { token?: string; messageId?: number; action?: 'leave'; date?: string; shift?: Shift; kind?: LeaveKind; note?: string | null };
+  const body = await req.json() as { token?: string; messageId?: number; action?: 'leave' | 'unavailable'; date?: string; shift?: Shift; kind?: LeaveKind; note?: string | null; ukind?: '날짜' | '요일'; weekday?: number | null; ushift?: Shift | null };
   const tok = tokenOf(req, body.token);
   if (body.action === 'leave') {
     const p = personByToken(tok);
     if (!p) return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
     const r = requestLeave(p.id, body.date ?? '', body.shift ?? '주간', body.kind ?? '연차', body.note ?? null);
+    return NextResponse.json(r, { status: r.ok ? 200 : 409 });
+  }
+  if (body.action === 'unavailable') {
+    const p = personByToken(tok);
+    if (!p) return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
+    const r = requestUnavailable(p.id, { kind: body.ukind ?? '날짜', date: body.date ?? null, weekday: body.weekday ?? null, shift: body.ushift ?? null, note: body.note ?? null });
     return NextResponse.json(r, { status: r.ok ? 200 : 409 });
   }
   return NextResponse.json({ ok: markRead(tok, Number(body.messageId)) });
