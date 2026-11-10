@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { openDb } from '../src/lib/db';
 import { addPerson, removePerson, cancelRequests, getSettings, setSettings, weekHoursFor, needFor, setNeed, setProduct, clearVacancy, ensureBoard, getBoard as getBoardRaw, copyPrevious, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
 import { periodFor } from '../src/lib/attendance-xlsx';
-import { requestVacancies, loginAccount, personByPhone, myWork, ensureToken, requestLeave, decideLeave, pendingLeaves, adminInbox, returnBoard, proposeBoard as propose2 } from '../src/lib/repo';
+import { personSkills, setSkill, requestVacancies, loginAccount, personByPhone, myWork, ensureToken, requestLeave, decideLeave, pendingLeaves, adminInbox, returnBoard, proposeBoard as propose2 } from '../src/lib/repo';
 import { autoFill, revertProposal, EDIT_ACTIONS } from '../src/lib/repo';
 import { parseSession, sessionCookie, meCookie, parseMe } from '../src/lib/auth';
 import { addDays, groupsOn } from '../src/lib/shift';
@@ -474,5 +474,20 @@ describe('자동 채우기와 입안 되돌리기', () => {
     expect(revertProposal(b.id, 'product', db)).toBe(true);
     expect(getBoard('2026-10-21', '주간', 2, db).status).toBe('초안');
     expect(revertProposal(b.id, 'product', db)).toBe(false); // 이미 초안이면 아무것도 안 함
+  });
+});
+
+describe('라인 숙련도 (사람 × 라인)', () => {
+  it('정하고 지울 수 있고, 불가로 정한 사람은 대체 요청 후보에서 빠진다', () => {
+    const db = memDb();
+    expect(personSkills(2, db).find((r) => r.post_id === 36)?.level).toBeNull();
+    setSkill(2, 36, '숙련', db);
+    expect(personSkills(2, db).find((r) => r.post_id === 36)?.level).toBe('숙련');
+    setSkill(2, 36, '불가', db);
+    const b = getBoard('2026-10-21', '주간', 2, db); // S-3 박현주(A 주간). B조 김순자(id 2)가 휴무 후보지만 불가
+    const r = sendRequests(b.id, 36, 1, db);
+    expect(r.candidates.map((c) => c.name)).not.toContain('김순자');
+    setSkill(2, 36, null, db);
+    expect(personSkills(2, db).find((r) => r.post_id === 36)?.level).toBeNull();
   });
 });

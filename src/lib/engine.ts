@@ -3,6 +3,9 @@ import { groupsOn, type Shift } from './shift';
 export type Person = { id: number; name: string; grp: string; work_type: '교대' | '주간고정' | '임시'; active: number };
 export type Experience = { personId: number; postId: number; product: string | null; count: number };
 export type Candidate = { personId: number; name: string; score: number; reasons: string[] };
+/** 사람별·라인별 숙련도. 불가면 후보에서 빠지고, 숙련이면 앞에 선다. 정하지 않은 라인은 과거 기록으로만 본다. */
+export type SkillLevel = '불가' | '가능' | '숙련';
+export type SkillMap = Map<number, Map<number, SkillLevel>>;
 
 export function availability(p: Person, date: string, shift: Shift): { ok: boolean; why: string } {
   if (!p.active) return { ok: false, why: '퇴사' };
@@ -20,6 +23,7 @@ export function rankCandidates(i: {
   assignedThatDay: Set<number>; excludeIds?: Set<number>; recentSubs: Map<number, number>; limit?: number; requireExperience?: boolean;
   /** 이번 주 근무시간(교대 수 × 한 교대 시간). 있으면 이유에 표시하고, 한 교대를 더해 상한을 넘는 사람은 뺀다 */
   weekHours?: Map<number, number>; shiftHours?: number; maxWeekHours?: number;
+  skills?: SkillMap;
 }): Candidate[] {
   const byP = new Map<number, Experience[]>();
   for (const e of i.experience) { if (!byP.has(e.personId)) byP.set(e.personId, []); byP.get(e.personId)!.push(e); }
@@ -28,21 +32,24 @@ export function rankCandidates(i: {
     if (i.excludeIds?.has(p.id) || i.assignedThatDay.has(p.id)) continue;
     const av = availability(p, i.date, i.shift);
     if (!av.ok) continue;
+    const lv = i.skills?.get(p.id)?.get(i.postId);
+    if (lv === '불가') continue; // 이 라인은 못 하는 사람
     const rows = byP.get(p.id) ?? [];
     const post = rows.filter((r) => r.postId === i.postId).reduce((s, r) => s + r.count, 0);
     const prod = i.product ? rows.filter((r) => r.product === i.product).reduce((s, r) => s + r.count, 0) : 0;
     const fac = rows.reduce((s, r) => s + r.count, 0);
-    if ((i.requireExperience ?? true) && fac === 0) continue;
+    if ((i.requireExperience ?? true) && fac === 0 && !lv) continue; // 기록도 없고 숙련도도 안 정했으면 뺀다
     const recent = i.recentSubs.get(p.id) ?? 0;
     const hours = i.weekHours?.get(p.id) ?? 0;
     if (i.weekHours && i.maxWeekHours && hours + (i.shiftHours ?? 12) > i.maxWeekHours) continue;
     const reasons = [av.why];
+    if (lv) reasons.push(lv === '숙련' ? '이 라인 숙련' : '이 라인 가능');
     if (i.weekHours) reasons.push(`이번 주 ${hours}시간`);
     if (post) reasons.push(`이 라인 ${post}회`);
     if (prod) reasons.push(`같은 제품 ${prod}회`);
     if (!post && fac) reasons.push(`이 공장 ${fac}회`);
     if (recent) reasons.push(`최근 대체 ${recent}회`);
-    out.push({ personId: p.id, name: p.name, score: post * 10 + prod * 3 + fac - recent * 25, reasons });
+    out.push({ personId: p.id, name: p.name, score: post * 10 + prod * 3 + fac - recent * 25 + (lv === '숙련' ? 40 : lv === '가능' ? 5 : 0), reasons });
   }
   out.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ko'));
   return out.slice(0, i.limit ?? 3);

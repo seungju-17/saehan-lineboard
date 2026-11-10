@@ -1,6 +1,6 @@
 /* 브라우저 판: /api/* 호출을 서버 없이 repo 함수로 바로 연결한다. src/app/api/* 와 같은 동작. */
 import { getDb } from './db-shim';
-import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, requestVacancies, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, monthSummary, myWork, adminInbox, decideLeave, requestLeave, returnBoard, weekHoursFor, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard, revertProposal, EDIT_ACTIONS } from '../src/lib/repo';
+import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, requestVacancies, personSkills, setSkill, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, monthSummary, myWork, adminInbox, decideLeave, requestLeave, returnBoard, weekHoursFor, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard, revertProposal, EDIT_ACTIONS } from '../src/lib/repo';
 import { currentShiftSeoul, todaySeoul, type Shift } from '../src/lib/shift';
 import type { LeaveKind } from '../src/lib/rules';
 import { getStats } from '../src/lib/stats';
@@ -73,6 +73,10 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
       return json(r, r.ok ? 200 : 409);
     }
     if (path === '/api/settings') { if (method === 'GET') return json(getSettings()); try { return json(setSettings(body as Partial<Settings>)); } catch (e) { return json({ error: (e as Error).message }, 400); } }
+    if (path === '/api/skills') {
+      if (method === 'GET') return json(personSkills(Number(u.searchParams.get('person'))));
+      setSkill(Number(body.person), Number(body.post), (body.level as '불가' | '가능' | '숙련' | null) ?? null); return json({ ok: true });
+    }
     if (path === '/api/people') {
       if (method === 'GET') { const h = weekHoursFor(todaySeoul()); return json(people(getDb(), false).map((p) => ({ ...p, week_hours: h.get(p.id) ?? 0 }))); }
       const { id, ...u2 } = body as { id: number } & Record<string, unknown>;

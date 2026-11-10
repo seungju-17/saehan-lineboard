@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { getDb, type DB } from './db';
 import { addDays, groupsOn, sameGroupBefore, weekRange, type Shift, todaySeoul } from './shift';
 import { defaultPassword, hashPassword } from './auth';
-import { aggregateExperience, typicalHeadcount, assignmentMessage, rankCandidates, requestMessage, type Person } from './engine';
+import { aggregateExperience, typicalHeadcount, assignmentMessage, rankCandidates, requestMessage, type Person, type SkillLevel, type SkillMap } from './engine';
 
 export type Factory = { id: number; code: string; name: string };
 export type Post = { id: number; factory_id: number; code: string; name: string; kind: string; sort: number; zone: string; unmanned: number; fixed: number };
@@ -166,6 +166,28 @@ export function weekHoursFor(date: string, db: DB = getDb(), shiftHours = getSet
 }
 
 /** 후보 계산에 필요한 경험·가용 정보 */
+/** 그 공장 라인들의 숙련도 표: person → post → 수준 */
+function skillMap(factoryId: number, db: DB): SkillMap {
+  const m: SkillMap = new Map();
+  for (const r of db.prepare('SELECT s.person_id, s.post_id, s.level FROM skills s JOIN posts po ON po.id=s.post_id WHERE po.factory_id=?').all(factoryId) as { person_id: number; post_id: number; level: SkillLevel }[]) {
+    if (!m.has(r.person_id)) m.set(r.person_id, new Map()); m.get(r.person_id)!.set(r.post_id, r.level);
+  }
+  return m;
+}
+export type SkillRow = { post_id: number; code: string; name: string; factory_id: number; zone: string; level: SkillLevel | null; count: number };
+/** 한 사람의 라인별 숙련도와 그 라인에 선 횟수(전체 기록). 유인 기계 라인만. */
+export function personSkills(personId: number, db: DB = getDb()): SkillRow[] {
+  return db.prepare(`SELECT po.id post_id, po.code, po.name, po.factory_id, po.zone, s.level,
+      (SELECT COUNT(DISTINCT a.board_id) FROM assignments a WHERE a.person_id=? AND a.post_id=po.id) count
+    FROM posts po LEFT JOIN skills s ON s.post_id=po.id AND s.person_id=? WHERE po.kind='machine' AND po.unmanned=0 ORDER BY po.factory_id, po.sort`).all(personId, personId) as SkillRow[];
+}
+/** 숙련도 정하기. null이면 지운다(기록으로만 판단). */
+export function setSkill(personId: number, postId: number, level: SkillLevel | null, db: DB = getDb()): void {
+  if (level === null) { db.prepare('DELETE FROM skills WHERE person_id=? AND post_id=?').run(personId, postId); return; }
+  if (!['불가', '가능', '숙련'].includes(level)) throw new Error('숙련도는 불가·가능·숙련 중 하나');
+  db.prepare('INSERT INTO skills (person_id, post_id, level) VALUES (?,?,?) ON CONFLICT(person_id, post_id) DO UPDATE SET level=excluded.level').run(personId, postId, level);
+}
+
 function rankContext(date: string, shift: Shift, factoryId: number, db: DB) {
   const st = getSettings(db);
   // 경험은 그날 기준 지난 180일. 그 사이에 기록이 없으면(자료 공백·체험판) 가장 최근 기록 180일치를 대신 본다.
@@ -180,7 +202,7 @@ function rankContext(date: string, shift: Shift, factoryId: number, db: DB) {
   for (const r of db.prepare("SELECT DISTINCT r.vacated_person_id person_id FROM requests r JOIN boards b ON b.id=r.board_id WHERE b.date=? AND r.vacated_person_id IS NOT NULL").all(date) as { person_id: number }[]) today.add(r.person_id);
   const recent = new Map<number, number>();
   for (const r of db.prepare(`SELECT a.person_id FROM assignments a JOIN boards b ON b.id=a.board_id WHERE a.source='대체' AND b.date>=? AND b.date<?`).all(recentSince, date) as { person_id: number }[]) recent.set(r.person_id, (recent.get(r.person_id) ?? 0) + 1);
-  return { people: people(db), experience: aggregateExperience(hist), assignedThatDay: today, recentSubs: recent, weekHours: weekHoursFor(date, db, st.shift_hours), shiftHours: st.shift_hours, maxWeekHours: st.week_max_hours };
+  return { people: people(db), skills: skillMap(factoryId, db), experience: aggregateExperience(hist), assignedThatDay: today, recentSubs: recent, weekHours: weekHoursFor(date, db, st.shift_hours), shiftHours: st.shift_hours, maxWeekHours: st.week_max_hours };
 }
 
 /** 라인별 "+ 이름" 추천: 그 라인 경험자 중 오늘 투입 가능한 사람 */
@@ -190,7 +212,7 @@ function suggestionsFor(date: string, shift: Shift, factoryId: number, ps: Post[
   const out: Board['suggestions'] = {};
   const assignedHere = new Set(assignments.map((a) => a.person_id));
   for (const p of ps) {
-    const c = rankCandidates({ date, shift, postId: p.id, product: null, people: ctx.people, experience: ctx.experience, assignedThatDay: new Set([...ctx.assignedThatDay, ...assignedHere]), recentSubs: ctx.recentSubs, weekHours: ctx.weekHours, shiftHours: ctx.shiftHours, maxWeekHours: ctx.maxWeekHours, limit: 8 });
+    const c = rankCandidates({ date, shift, postId: p.id, product: null, people: ctx.people, experience: ctx.experience, assignedThatDay: new Set([...ctx.assignedThatDay, ...assignedHere]), recentSubs: ctx.recentSubs, skills: ctx.skills, weekHours: ctx.weekHours, shiftHours: ctx.shiftHours, maxWeekHours: ctx.maxWeekHours, limit: 8 });
     out[p.id] = c.map((x) => ({ id: x.personId, name: x.name, affiliation: pmap.get(x.personId)?.affiliation ?? null, hint: x.reasons.slice(0, 2).join(' · ') }));
   }
   return out;

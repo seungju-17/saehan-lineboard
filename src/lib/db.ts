@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   kind TEXT NOT NULL CHECK (kind IN ('연차','반차','병가')), note TEXT, status TEXT NOT NULL DEFAULT '신청' CHECK (status IN ('신청','승인','거절')),
   reply TEXT, decided_by TEXT, created_at TEXT DEFAULT (datetime('now','localtime')), decided_at TEXT);
 CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL CHECK (role IN ('팀장','담당자','반장')), factory_id INTEGER, password_hash TEXT NOT NULL, active INTEGER DEFAULT 1);
+CREATE TABLE IF NOT EXISTS skills (person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id), level TEXT NOT NULL CHECK (level IN ('불가','가능','숙련')), PRIMARY KEY (person_id, post_id));
 `;
 
 export type DB = Database.Database;

@@ -70,3 +70,25 @@ describe('typicalHeadcount', () => {
     expect(typicalHeadcount([7, 7])).toBe(4);
   });
 });
+
+describe('라인 숙련도', () => {
+  const base = { date: '2025-11-12', shift: '주간' as const, postId: 5, product: null, assignedThatDay: new Set<number>(), recentSubs: new Map<number, number>() };
+  // 2025-11-12: B 주간 · A 야간 · C 휴무 → C조만 후보
+  const people = [
+    { id: 1, name: '김숙련', grp: 'C', work_type: '교대' as const, active: 1 },
+    { id: 2, name: '이불가', grp: 'C', work_type: '교대' as const, active: 1 },
+    { id: 3, name: '박기록없음', grp: 'C', work_type: '교대' as const, active: 1 },
+  ];
+  const experience = [{ personId: 2, postId: 5, product: null, count: 9 }, { personId: 1, postId: 5, product: null, count: 1 }];
+  it('불가로 정한 사람은 기록이 많아도 빠지고, 숙련은 앞에 선다', () => {
+    const skills = new Map([[2, new Map([[5, '불가' as const]])], [1, new Map([[5, '숙련' as const]])]]);
+    const r = rankCandidates({ ...base, people, experience, skills, limit: 5 });
+    expect(r.map((c) => c.name)).toEqual(['김숙련']);
+    expect(r[0].reasons).toContain('이 라인 숙련');
+  });
+  it('가능으로 정하면 기록이 없어도 후보가 된다', () => {
+    const skills = new Map([[3, new Map([[5, '가능' as const]])]]);
+    const r = rankCandidates({ ...base, people, experience, skills, limit: 5 });
+    expect(r.map((c) => c.name)).toEqual(['이불가', '김숙련', '박기록없음']); // 숙련도를 안 정한 이불가는 기록 9회로 1등
+  });
+});
