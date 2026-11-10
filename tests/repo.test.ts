@@ -226,6 +226,17 @@ describe('근태', () => {
 });
 
 describe('2공장 결재와 휴일 복사', () => {
+  it('입안된 표는 알림함에 「입안」으로 보이고, 마무리되면 사라진다', () => {
+    const db = memDb();
+    const d = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10); // 알림함은 어제부터 앞으로만 본다
+    const b = getBoard(d, '주간', 2, db);
+    proposeBoard(b.id, db);
+    const ev = adminInbox(db).events.find((e) => e.kind === '입안');
+    expect(ev?.text).toContain(`${+d.slice(5, 7)}/${+d.slice(8, 10)} 주간`);
+    expect(ev?.text).toContain('결정 기다림');
+    confirmBoard(b.id, db);
+    expect(adminInbox(db).events.find((e) => e.kind === '입안')).toBeUndefined();
+  });
   it('입안 → 결정(확정)', () => {
     const db = memDb();
     const b = getBoard('2026-10-21', '주간', 2, db);

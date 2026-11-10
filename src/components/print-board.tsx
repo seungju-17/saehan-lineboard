@@ -43,7 +43,8 @@ export function PrintBoard({ b, factoryName, action }: { b: Board; factoryName: 
               <td className="border border-ink h-12 w-16 align-bottom font-bold" style={{ color: '#2a9d6f' }}>{b.status === '확정' ? '결정' : ''}</td>
             </tr></tbody>
           </table>
-        ) : (b.status === '확정' && <span className="inline-flex items-center h-7 px-2.5 rounded font-bold text-white" style={{ background: '#2a9d6f' }}>확정</span>)}
+        ) : b.status === '확정' ? <span className="inline-flex items-center h-7 px-2.5 rounded font-bold text-white" style={{ background: '#2a9d6f' }}>확정</span>
+          : b.status === '입안' ? <span className="inline-flex items-center h-7 px-2.5 rounded font-bold text-ink-2 border border-ink">입안 · 확정 대기</span> : null}
         {action}
       </div>
       <table className="w-full text-[15px] border-collapse border-2 border-ink">
