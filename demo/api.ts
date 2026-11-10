@@ -1,6 +1,6 @@
 /* 브라우저 판: /api/* 호출을 서버 없이 repo 함수로 바로 연결한다. src/app/api/* 와 같은 동작. */
 import { getDb } from './db-shim';
-import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, monthSummary, myWork, adminInbox, decideLeave, requestLeave, returnBoard, weekHoursFor, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard, revertProposal, EDIT_ACTIONS } from '../src/lib/repo';
+import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, listAccounts, personByPhone, personByToken, addPerson, cancelRequests, proposeBoard, requestVacancies, setAttendance, setNote, setStopped, allRequests, autoFill, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, markRead, monthSummary, myWork, adminInbox, decideLeave, requestLeave, returnBoard, weekHoursFor, nextCandidates, people, removePerson, respond, sendRequests, setProduct, unconfirmBoard, revertProposal, EDIT_ACTIONS } from '../src/lib/repo';
 import { currentShiftSeoul, todaySeoul, type Shift } from '../src/lib/shift';
 import type { LeaveKind } from '../src/lib/rules';
 import { getStats } from '../src/lib/stats';
@@ -30,7 +30,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
         case 'add': addPerson(board.id, postId, body.personId ? personId : findOrCreatePerson(String(body.name ?? ''), factory).id); break;
         case 'remove': extra = { ...extra, ...removePerson(board.id, postId, personId, false) }; break;
         case 'absent': removePerson(board.id, postId, personId, true); extra = sendRequests(board.id, postId, personId); break;
-        case 'send': extra = sendRequests(board.id, postId, null); break;
+        case 'send': extra = sendRequests(board.id, postId, null, undefined, body.personId ? personId : undefined); break;
         case 'next': extra = nextCandidates(board.id, postId); break;
         case 'cancel': clearVacancy(board.id, postId); break;
         case 'cancel_requests': extra = cancelRequests(board.id, postId, body.requestId ? Number(body.requestId) : null); break;
@@ -41,6 +41,7 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
         case 'propose': proposeBoard(board.id); break;
         case 'return': returnBoard(board.id, (body.note as string | null) ?? null); break;
         case 'autofill': extra = { ...extra, ...autoFill(board.id) }; break;
+        case 'request_all': extra = { ...extra, ...requestVacancies(board.id) }; break;
         case 'confirm': extra = confirmBoard(board.id); break;
         case 'unconfirm': unconfirmBoard(board.id); break;
         default: return json({ error: 'unknown action' }, 400);

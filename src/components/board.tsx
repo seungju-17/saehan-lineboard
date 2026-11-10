@@ -104,14 +104,15 @@ export function Board(): React.ReactElement {
   const role = session?.kind === 'admin' ? session.role : undefined;
   const mayDecide = twoStep ? CAN.decide(role) : CAN.confirm(role);
 
-  async function autofill(): Promise<void> {
-    const d = await act({ action: 'autofill' });
+  /** 빈 자리 전부에 대체 요청. 표에 바로 넣지 않는다. 수락한 사람이 들어간다. */
+  async function requestAll(): Promise<void> {
+    const d = await act({ action: 'request_all' });
     if (!d) return;
-    const r = (d as BoardT & { filled: number; lines: number; need: number; short?: { code: string; missing: number }[] });
-    const left = (r.short ?? []).map((x) => `${x.code} ${x.missing}명`).join(', ');
-    setFlash(r.filled === 0
-      ? (r.need === 0 ? '채울 자리가 없습니다' : `넣을 수 있는 사람이 없습니다 · 못 채운 라인: ${left}. 「+」로 직접 넣으세요.`)
-      : `${r.lines}개 라인에 ${r.filled}명을 넣었습니다.${left ? ` 못 채운 라인: ${left}. 「+」로 직접 넣으세요.` : ' 확인 후 입안하세요.'}`);
+    const r = d as BoardT & { lines: number; sent: number; noCand: string[]; skipped: number };
+    const nc = r.noCand.length ? ` 후보가 없는 라인: ${r.noCand.join(', ')} → 「+」에서 직접 넣으세요.` : '';
+    setFlash(r.lines === 0
+      ? (r.skipped ? '빈 자리마다 이미 요청이 나가 있습니다. 답을 기다리는 중입니다.' : '요청 보낼 빈 자리가 없습니다.')
+      : `${r.lines}개 라인에 요청 ${r.sent}건을 보냈습니다. 수락한 사람이 표에 들어갑니다.${nc}`);
   }
   async function confirm(): Promise<void> {
     if (!(await ask(`${total}명에게 알림을 보냅니다.`))) return;
@@ -181,7 +182,7 @@ export function Board(): React.ReactElement {
           <a href={`/print?${q}`} target="_blank" className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">인쇄</a>
           <a href={`/api/board/export?${q}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">엑셀</a>
           <a href={`/api/attendance/export?month=${date.slice(0, 7)}&factory=${factory}`} className="h-9 px-3 inline-flex items-center rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">월 근태표</a>
-          {!locked && <button onClick={autofill} disabled={busy} className="h-11 px-4 rounded-md border border-brand/30 bg-white text-[15px] font-semibold text-brand hover:border-brand hover:bg-brand-soft disabled:opacity-40">자동 채우기</button>}
+          {!locked && <button onClick={requestAll} disabled={busy || vacantCount === 0} title="필요 인원보다 적은 라인마다 후보에게 대체 요청을 보냅니다" className="h-11 px-4 rounded-md border border-brand/30 bg-white text-[15px] font-semibold text-brand hover:border-brand hover:bg-brand-soft disabled:opacity-40">빈 자리 요청 보내기{vacantCount > 0 ? ` ${vacantCount}` : ''}</button>}
           {locked
             ? (mayDecide && <button onClick={() => act({ action: 'unconfirm' })} disabled={busy} className="h-11 px-4 rounded-md border border-line bg-white text-[15px] font-medium hover:border-ink-3">{final} 해제</button>)
             : board?.status === '입안' && mayDecide
@@ -304,16 +305,16 @@ export function Board(): React.ReactElement {
                             <button data-chip="add" aria-label={`${p.code}에 이름 추가`} onClick={() => { setPop({ kind: 'add', postId: p.id }); setQuery(''); }} className={`h-8 w-8 rounded-md text-ink-3 hover:bg-chip hover:text-ink ${ppl.length === 0 && !vacant ? 'border border-dashed border-line' : ''}`}>+</button>
                             {pop?.kind === 'add' && pop.postId === p.id && (
                               <Pop ref={popRef} wide>
-                                <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="이름 검색…" aria-label="이름 검색" autoComplete="off" spellCheck={false}
+                                <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="후보를 누르면 요청 · 이름을 쳐서 Enter면 바로 넣기" aria-label="이름 검색" autoComplete="off" spellCheck={false}
                                   onKeyDown={async (e) => { if (e.key === 'Enter' && query.trim()) { setPop(null); const d = await act({ action: 'add', postId: p.id, name: query.trim() }); if (d && !(d.assignments.some((a) => a.post_id === p.id && a.name === query.trim().replace(/\s+/g, '')))) setFlash('추가하지 못했습니다'); } }}
                                   className="mx-2 mt-2 mb-1 h-9 px-2.5 border border-line rounded-md w-[calc(100%-16px)] text-sm focus:border-brand" />
                                 {(board!.suggestions[p.id] ?? []).filter((s) => !query || s.name.includes(query.replace(/\s+/g, ''))).slice(0, 8).map((s) => (
-                                  <PopBtn key={s.id} onClick={() => { setPop(null); act({ action: 'add', postId: p.id, personId: s.id }); }}>
-                                    <span className="font-medium">{s.name}</span><span className="ml-2 text-xs text-ink-3">{s.affiliation} · {s.hint}</span>
+                                  <PopBtn key={s.id} onClick={async () => { setPop(null); const d = await act({ action: 'send', postId: p.id, personId: s.id }); if (d) afterSend(p, d); }}>
+                                    <span className="font-medium">{s.name}</span><span className="ml-2 text-xs text-ink-3">{s.affiliation} · {s.hint}</span><span className="ml-auto text-xs text-brand">요청 보내기</span>
                                   </PopBtn>
                                 ))}
-                                {query.trim() && !(board!.suggestions[p.id] ?? []).some((s) => s.name === query.trim()) && (
-                                  <PopBtn onClick={() => { setPop(null); act({ action: 'add', postId: p.id, name: query.trim() }); }}>‘{query.trim()}’ 새로 추가 (임시)</PopBtn>
+                                {query.trim() && (
+                                  <PopBtn onClick={() => { setPop(null); act({ action: 'add', postId: p.id, name: query.trim() }); }}>‘{query.trim()}’ 바로 넣기 <span className="ml-1 text-xs text-ink-3">(요청 없이 · 명단에 없으면 임시로 추가)</span></PopBtn>
                                 )}
                               </Pop>
                             )}

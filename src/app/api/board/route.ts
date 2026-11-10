@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { type AttendanceKind, addPerson, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, monthSummary, nextCandidates, removePerson, returnBoard, sendRequests, setProduct, unconfirmBoard, autoFill, setNeed, revertProposal, EDIT_ACTIONS } from '@/lib/repo';
+import { type AttendanceKind, addPerson, requestVacancies, cancelRequests, proposeBoard, setAttendance, setNote, setStopped, clearVacancy, confirmBoard, findOrCreatePerson, getBoard, monthSummary, nextCandidates, removePerson, returnBoard, sendRequests, setProduct, unconfirmBoard, autoFill, setNeed, revertProposal, EDIT_ACTIONS } from '@/lib/repo';
 import type { Shift } from '@/lib/shift';
 
 type Key = { date: string; shift: Shift; factory: number };
@@ -23,7 +23,7 @@ type Action =
   | { action: 'add'; postId: number; personId?: number; name?: string }
   | { action: 'remove'; postId: number; personId: number }
   | { action: 'absent'; postId: number; personId: number }
-  | { action: 'send'; postId: number }
+  | { action: 'send'; postId: number; personId?: number }
   | { action: 'next'; postId: number }
   | { action: 'cancel'; postId: number }
   | { action: 'cancel_requests'; postId: number; requestId?: number }
@@ -34,6 +34,7 @@ type Action =
   | { action: 'propose' }
   | { action: 'return'; note?: string | null }
   | { action: 'autofill' }
+  | { action: 'request_all' }
   | { action: 'confirm' }
   | { action: 'unconfirm' };
 
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
       case 'remove': extra = { ...extra, ...removePerson(board.id, body.postId, body.personId, false) }; break;
       case 'absent': removePerson(board.id, body.postId, body.personId, true); extra = sendRequests(board.id, body.postId, body.personId); break;
-      case 'send': extra = sendRequests(board.id, body.postId, null); break;
+      case 'send': extra = sendRequests(board.id, body.postId, null, undefined, body.personId ? Number(body.personId) : undefined); break;
       case 'next': extra = nextCandidates(board.id, body.postId); break;
       case 'cancel': clearVacancy(board.id, body.postId); break;
       case 'cancel_requests': extra = cancelRequests(board.id, body.postId, body.requestId ?? null); break;
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       case 'propose': proposeBoard(board.id); break;
       case 'return': returnBoard(board.id, body.note ?? null); break;
       case 'autofill': extra = { ...extra, ...autoFill(board.id) }; break;
+      case 'request_all': extra = { ...extra, ...requestVacancies(board.id) }; break;
       case 'confirm': extra = confirmBoard(board.id); break;
       case 'unconfirm': unconfirmBoard(board.id); break;
       default: return NextResponse.json({ error: 'unknown action' }, { status: 400 });

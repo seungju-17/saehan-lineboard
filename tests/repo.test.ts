@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { openDb } from '../src/lib/db';
 import { addPerson, removePerson, cancelRequests, getSettings, setSettings, weekHoursFor, needFor, setNeed, setProduct, clearVacancy, ensureBoard, getBoard, isVacantPost, isWeekend, respond, sendRequests, setAttendance, setStopped, proposeBoard, confirmBoard } from '../src/lib/repo';
 import { periodFor } from '../src/lib/attendance-xlsx';
-import { loginAccount, personByPhone, myWork, ensureToken, requestLeave, decideLeave, pendingLeaves, adminInbox, returnBoard, proposeBoard as propose2 } from '../src/lib/repo';
+import { requestVacancies, loginAccount, personByPhone, myWork, ensureToken, requestLeave, decideLeave, pendingLeaves, adminInbox, returnBoard, proposeBoard as propose2 } from '../src/lib/repo';
 import { autoFill, revertProposal, EDIT_ACTIONS } from '../src/lib/repo';
 import { parseSession, sessionCookie, meCookie, parseMe } from '../src/lib/auth';
 import { addDays, groupsOn } from '../src/lib/shift';
@@ -431,6 +431,28 @@ describe('휴가 신청과 반려', () => {
     expect(after.status).toBe('초안'); expect(after.return_note).toBe('S-3 인원 확인');
     propose2(b.id, db);
     expect(getBoard('2026-10-21', '주간', 2, db).return_note).toBeNull();
+  });
+});
+
+describe('빈 자리 요청 보내기', () => {
+  it('필요 인원보다 적은 라인마다 요청을 보내고, 표에 바로 넣지 않는다', () => {
+    const db = memDb();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    setNeed(b.id, 36, 2, db); // S-3 박현주 1명 → 1명 더
+    const r = requestVacancies(b.id, db);
+    expect(r.lines).toBe(1); // 빈 라인은 S-3 하나
+    if (r.sent === 0) expect(r.noCand).toEqual(['S-3']); // 이 고정 자료엔 쉬는 조 경험자가 없을 수 있다
+    const after = getBoard('2026-10-21', '주간', 2, db);
+    expect(after.assignments.filter((a) => a.post_id === 36).length).toBe(1); // 표에 바로 넣지 않는다
+    expect(after.requests.filter((q) => q.post_id === 36 && q.status === '발송').length).toBe(r.sent);
+    if (r.sent > 0) { const again = requestVacancies(b.id, db); expect(again.lines).toBe(0); expect(again.skipped).toBe(1); } // 기다리는 요청이 있으면 또 보내지 않는다
+  });
+  it('후보 목록에서 한 사람을 고르면 그 사람에게만 요청이 간다', () => {
+    const db = memDb();
+    const b = getBoard('2026-10-21', '주간', 2, db);
+    const r = sendRequests(b.id, 36, null, db, 2); // 김순자(B조 휴무)
+    expect(r.sent).toBe(1); expect(r.candidates[0].name).toBe('김순자');
+    expect(sendRequests(b.id, 36, null, db, 2).sent).toBe(0); // 이미 물어봤으면 다시 안 보냄
   });
 });
 

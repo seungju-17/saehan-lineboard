@@ -349,14 +349,20 @@ export function cancelRequests(boardId: number, postId: number, requestId: numbe
   return { cancelled: rows.length };
 }
 
-export function sendRequests(boardId: number, postId: number, vacatedId: number | null, db: DB = getDb()): SendResult {
+/** 대체 요청 보내기. only를 주면 담당자가 고른 그 한 사람에게만 보낸다(후보 목록에서 이름을 눌렀을 때). */
+export function sendRequests(boardId: number, postId: number, vacatedId: number | null, db: DB = getDb(), only?: number): SendResult {
   const b = db.prepare('SELECT date, shift, factory_id, status FROM boards WHERE id=?').get(boardId) as { date: string; shift: Shift; factory_id: number; status: string };
   const post = db.prepare('SELECT code, name FROM posts WHERE id=?').get(postId) as { code: string; name: string };
   const product = (db.prepare('SELECT product FROM board_posts WHERE board_id=? AND post_id=?').get(boardId, postId) as { product: string | null } | undefined)?.product ?? null;
   const asked = new Set((db.prepare('SELECT person_id FROM requests WHERE board_id=? AND post_id=?').all(boardId, postId) as { person_id: number }[]).map((r) => r.person_id));
   if (vacatedId) asked.add(vacatedId);
   const ctx = rankContext(b.date, b.shift, b.factory_id, db);
-  const ranked = rankCandidates({ date: b.date, shift: b.shift, postId, product, ...ctx, excludeIds: asked, limit: 3 });
+  let ranked = rankCandidates({ date: b.date, shift: b.shift, postId, product, ...ctx, excludeIds: asked, limit: only ? 50 : 3 });
+  if (only) {
+    const hit = ranked.find((c) => c.personId === only);
+    const who = db.prepare('SELECT name FROM people WHERE id=?').get(only) as { name: string } | undefined;
+    ranked = asked.has(only) || !who ? [] : [hit ?? { personId: only, name: who.name, score: 0, reasons: ['담당자가 고름'] }];
+  }
   const expires = new Date(Date.now() + getSettings(db).expiry_minutes * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
   const fac = factoryName(b.factory_id, db);
   const ins = db.prepare('INSERT INTO requests (board_id, post_id, person_id, vacated_person_id, rank, reason, token, expires_at) VALUES (?,?,?,?,?,?,?,?)');
@@ -371,6 +377,24 @@ export function sendRequests(boardId: number, postId: number, vacatedId: number 
   db.prepare('UPDATE board_posts SET vacant=1, need=COALESCE(need, ?) WHERE board_id=? AND post_id=?').run(countAt(boardId, postId, db) + 1, boardId, postId);
   db.prepare("INSERT INTO logs (board_id, post_id, person_id, action, detail) VALUES (?,?,?,'대체요청',?)").run(boardId, postId, vacatedId, `${ranked.length}명`);
   return { sent: ranked.length, candidates: ranked.map((c) => ({ name: c.name, reasons: c.reasons })) };
+}
+/** 빈 자리 전부에 요청 보내기. 필요 인원보다 사람이 적은 라인마다 후보에게 요청한다(이미 기다리는 요청이 있는 자리는 건너뜀). 표에 바로 넣지 않고 수락한 사람이 들어간다. */
+export function requestVacancies(boardId: number, db: DB = getDb()): { lines: number; sent: number; noCand: string[]; skipped: number } {
+  const b = db.prepare('SELECT status FROM boards WHERE id=?').get(boardId) as { status: string };
+  const out = { lines: 0, sent: 0, noCand: [] as string[], skipped: 0 };
+  if (b.status === '확정') return out;
+  const posts = db.prepare(`SELECT po.id, po.code, po.kind, po.unmanned, bp.product, bp.vacant, bp.stopped, bp.need,
+      (SELECT COUNT(DISTINCT a.person_id) FROM assignments a WHERE a.board_id=bp.board_id AND a.post_id=po.id) cnt,
+      (SELECT COUNT(*) FROM requests r WHERE r.board_id=bp.board_id AND r.post_id=po.id AND r.status='발송') waiting
+    FROM board_posts bp JOIN posts po ON po.id=bp.post_id WHERE bp.board_id=? AND COALESCE(bp.stopped,0)=0 AND po.unmanned=0 ORDER BY po.sort`).all(boardId) as
+    { id: number; code: string; kind: string; unmanned: number; product: string | null; vacant: number; stopped: number; need: number | null; cnt: number; waiting: number }[];
+  for (const p of posts) {
+    if (!isVacantPost({ kind: p.kind, unmanned: p.unmanned, product: p.product, vacant: p.vacant, stopped: p.stopped, need: p.need }, p.cnt)) continue;
+    if (p.waiting > 0) { out.skipped++; continue; }
+    const r = sendRequests(boardId, p.id, null, db);
+    out.lines++; out.sent += r.sent; if (r.sent === 0) out.noCand.push(p.code);
+  }
+  return out;
 }
 export function nextCandidates(boardId: number, postId: number, db: DB = getDb()): SendResult {
   db.prepare("UPDATE requests SET status='만료', responded_at=datetime('now','localtime') WHERE board_id=? AND post_id=? AND status='발송'").run(boardId, postId);
