@@ -12,7 +12,9 @@ export function People({ initial, maxHours = 52, shiftHours = 12 }: { initial: R
   const near = rows.filter((p) => p.active && (p.week_hours ?? 0) + shiftHours > maxHours);
   const [q, setQ] = useState('');
   const [withTemp, setWithTemp] = useState(false);
-  const list = rows.filter((p) => p.active && (!q || p.name.includes(q)) && (withTemp || p.work_type !== '임시'));
+  const [grpF, setGrpF] = useState<string>('전체'); // 조별로 보기: A조끼리, B조끼리
+  const inGroup = (p: Row): boolean => grpF === '전체' ? true : grpF === '주간고정' ? p.work_type === '주간고정' : grpF === '임시' ? p.work_type === '임시' : p.work_type === '교대' && p.grp === grpF;
+  const list = rows.filter((p) => p.active && (!q || p.name.includes(q)) && inGroup(p) && (withTemp || grpF === '임시' || p.work_type !== '임시'));
   const regular = rows.filter((p) => p.active && p.work_type !== '임시').length;
   const temps = rows.filter((p) => p.active && p.work_type === '임시').length;
 
@@ -28,7 +30,10 @@ export function People({ initial, maxHours = 52, shiftHours = 12 }: { initial: R
           <h1 className="text-[26px] font-bold tracking-tight leading-none">직원</h1>
           <div className="mt-1.5 text-sm text-ink-2">정직원 <b className="text-ink">{regular}</b>명 · 임시 <b className="text-ink">{temps}</b>명{near.length > 0 && <span className="ml-2 inline-flex items-center h-6 px-2 rounded bg-wait-bg text-wait font-semibold">이번 주 {maxHours}시간 임박 {near.length}명</span>}</div>
         </div>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <div role="group" aria-label="조별 보기" className="inline-flex h-9 p-0.5 rounded-md bg-ground border border-line">
+            {['전체', 'A', 'B', 'C', '주간고정', '임시'].map((g) => <button key={g} type="button" aria-pressed={grpF === g} onClick={() => setGrpF(g)} className={`px-3 rounded text-sm whitespace-nowrap ${grpF === g ? 'bg-white shadow-sm font-semibold text-ink' : 'text-ink-2 hover:text-ink'}`}>{g === '전체' || g === '주간고정' || g === '임시' ? g : `${g}조`}</button>)}
+          </div>
           <label className="text-sm text-ink-2 flex items-center gap-1.5"><input type="checkbox" checked={withTemp} onChange={(e) => setWithTemp(e.target.checked)} className="accent-brand" />임시 인원 포함</label>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 검색…" aria-label="이름 검색" autoComplete="off" spellCheck={false} className="h-9 px-3 border border-line bg-white rounded-md w-44 text-sm focus:border-brand" />
         </div>
@@ -50,7 +55,7 @@ export function People({ initial, maxHours = 52, shiftHours = 12 }: { initial: R
                 <td className="py-2 pr-5 text-right tabular-nums text-sm">{(() => { const h = p.week_hours ?? 0; const over = h + shiftHours > maxHours; return <span className={`inline-flex items-center h-6 px-2 rounded ${over ? 'bg-wait-bg text-wait font-semibold' : h ? 'text-ink-2' : 'text-ink-3'}`} title={over ? `한 교대 더하면 ${maxHours}시간을 넘어 대체 후보에서 빠집니다` : undefined}>{h}시간{over ? ' · 한도' : ''}</span>; })()}</td>
               </tr>
             ))}
-            {list.length === 0 && <tr><td colSpan={9} className="py-12 text-center text-ink-3">검색 결과가 없습니다</td></tr>}
+            {list.length === 0 && <tr><td colSpan={9} className="py-12 text-center text-ink-3">{grpF === '전체' ? '검색 결과가 없습니다' : `${grpF === 'A' || grpF === 'B' || grpF === 'C' ? grpF + '조' : grpF}에 해당하는 사람이 없습니다`}</td></tr>}
           </tbody>
         </table>
       </div>

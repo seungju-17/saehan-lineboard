@@ -1,8 +1,10 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import type { Stats, Kpi } from '@/lib/stats';
+import type { Board } from '@/lib/repo';
 import { currentShiftSeoul, fmtKo, fmtShort, todaySeoul, type Shift } from '@/lib/shift';
-import { groupColor } from '@/lib/colors';
+import { groupColor, zoneColor } from '@/lib/colors';
 
 /* 차트 색: dataviz 검증기를 통과한 범주 팔레트 5칸(고정 순서). 글자는 항상 글자색. */
 const SERIES = ['#2b63d9', '#e8932e', '#2a9d6f', '#8b919c', '#1e3a66'];
@@ -13,9 +15,11 @@ export function Dashboard(): React.ReactElement {
   const [shift, setShift] = useState<Shift>(currentShiftSeoul());
   const [days, setDays] = useState<number>(30);
   const [s, setS] = useState<Stats | null>(null);
+  const [board, setBoard] = useState<Board | null>(null);
   const date = useMemo(() => todaySeoul(), []);
   const load = useCallback(async (): Promise<void> => {
     const r = await fetch(`/api/stats?factory=${factory}&shift=${shift}&days=${days}&date=${date}`); if (r.ok) setS(await r.json());
+    const b = await fetch(`/api/board?date=${date}&shift=${shift}&factory=${factory}`); if (b.ok) setBoard(await b.json());
   }, [factory, shift, days, date]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- 조회 결과 반영
   useEffect(() => { load(); }, [load]);
@@ -36,10 +40,16 @@ export function Dashboard(): React.ReactElement {
 
       {!s ? <div className="py-16 text-center text-ink-3">불러오는 중…</div> : (
         <>
-          {/* 1줄: 지표 카드 */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* 1줄: 오늘 숫자 셋 */}
+          <div className="grid grid-cols-3 gap-3">
             {s.kpis.map((k) => <KpiTile key={k.key} k={k} baseline={s.baseline} />)}
           </div>
+
+          {/* 오늘 배치표: 돌리는 라인만 간단히. 고치려면 오늘 배치로 */}
+          <Card title={`오늘 배치표 · ${FACTORIES.find(([id]) => id === factory)?.[1]} ${shift}`} sub={board ? (board.status === '확정' ? '확정됨' : board.status === '입안' ? '입안됨' : '작성 중') : undefined}>
+            {board ? <TodayBoard b={board} /> : <Empty>불러오는 중…</Empty>}
+            <div className="mt-3 text-right"><Link href={`/today?date=${date}&shift=${shift}&factory=${factory}`} className="inline-flex items-center h-9 px-3 rounded-md border border-line bg-white text-sm text-ink-2 hover:text-ink hover:border-ink-3">오늘 배치에서 열기 →</Link></div>
+          </Card>
 
           {/* 2줄: 라인별 인원 + 근무자 구성 */}
           <div className="grid gap-3 lg:grid-cols-[3fr_2fr]">
@@ -99,6 +109,37 @@ function KpiTile({ k, baseline }: { k: Kpi; baseline: { date: string; label: str
           : <>{up ? '▲' : '▼'} {Math.abs(k.delta)}{k.pct ? '%p' : k.unit} <span className="text-ink-3">· {base}</span></>}
       </div>
     </div>
+  );
+}
+
+/** 현황용 읽기 전용 배치표. 제품이 있거나 사람이 선 라인만, 구역별로. */
+function TodayBoard({ b }: { b: Board }): React.ReactElement {
+  const byPost = new Map<number, Board['assignments']>();
+  for (const a of b.assignments) byPost.set(a.post_id, [...(byPost.get(a.post_id) ?? []), a]);
+  const rows = b.posts.filter((p) => !p.stopped && (p.product || (byPost.get(p.id)?.length ?? 0) > 0));
+  if (rows.length === 0) return <Empty>오늘 이 교대에 배치된 라인이 없습니다.</Empty>;
+  const groups: { name: string; posts: typeof rows }[] = [];
+  for (const p of rows) { const g = p.zone || '라인'; const last = groups[groups.length - 1]; if (last && last.name === g) last.posts.push(p); else groups.push({ name: g, posts: [p] }); }
+  return (
+    <table className="w-full text-[14px]">
+      {groups.map((g) => { const zc = zoneColor(g.name); return (
+        <tbody key={g.name}>
+          <tr><td colSpan={3} className="pt-2 pb-1 text-[12px] font-bold" style={{ color: zc.ink }}>{g.name}</td></tr>
+          {g.posts.map((p) => { const ppl = byPost.get(p.id) ?? []; return (
+            <tr key={p.id} className="border-t border-line-2">
+              <td className="py-1.5 w-24 font-bold" style={{ color: zc.ink }}>{p.code}</td>
+              <td className="py-1.5 w-40 text-ink-2 truncate">{p.product ?? ''}</td>
+              <td className="py-1.5">
+                <span className="inline-flex flex-wrap gap-1">
+                  {ppl.map((a) => { const gc = a.source === '대체' ? { ink: '#2a9d6f', bg: '#e1f4ec' } : groupColor(a.grp, a.work_type); return <span key={a.id} className="inline-flex items-center h-6 px-1.5 rounded-sm text-[13px] font-medium border-l-4" style={{ background: gc.bg, borderLeftColor: gc.ink }}>{a.name}</span>; })}
+                  {p.unmanned && ppl.length === 0 ? <span className="text-ink-3 text-[13px]">무인</span> : null}
+                </span>
+              </td>
+            </tr>
+          ); })}
+        </tbody>
+      ); })}
+    </table>
   );
 }
 

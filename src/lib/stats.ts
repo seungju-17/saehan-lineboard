@@ -52,22 +52,12 @@ export function getStats(date: string, shift: Shift, factoryId: number, days = 3
 
   const reqAgg = db.prepare(`SELECT COUNT(*) sent, SUM(r.status IN ('수락','거절')) responded, SUM(r.status='수락') accepted
     FROM requests r JOIN boards b ON b.id=r.board_id WHERE b.factory_id=? AND b.date>=? AND b.date<=?`).get(factoryId, since, date) as { sent: number; responded: number | null; accepted: number | null };
-  const slots = db.prepare(`SELECT COUNT(*) n, SUM(ok) filled FROM (SELECT r.board_id, r.post_id, MAX(r.status='수락') ok FROM requests r JOIN boards b ON b.id=r.board_id
-    WHERE b.factory_id=? AND b.date>=? AND b.date<=? GROUP BY r.board_id, r.post_id)`).get(factoryId, since, date) as { n: number; filled: number | null };
-  const rate = slots.n ? Math.round(((slots.filled ?? 0) / slots.n) * 100) : null;
-  const tempShare = now.workers ? Math.round((now.temps / now.workers) * 100) : 0;
-  const prevTemp = prev && prev.workers ? Math.round((prev.temps / prev.workers) * 100) : null;
   const d = (a: number, b: number | null | undefined): number | null => (b === null || b === undefined ? null : a - b);
 
   const kpis: Kpi[] = [
     { key: 'workers', label: '근무 인원', value: now.workers, unit: '명', delta: d(now.workers, prev?.workers), upIsGood: null },
     { key: 'lines', label: '가동 라인', value: now.lines, unit: '라인', delta: d(now.lines, prev?.lines), upIsGood: null },
-    { key: 'vacant', label: '비어 있음', value: now.vacant, unit: '자리', delta: d(now.vacant, prev?.vacant), upIsGood: false },
     { key: 'waiting', label: '요청 대기', value: now.waiting, unit: '건', delta: null, upIsGood: false },
-    { key: 'rate', label: `대체 성공률 ${days}일`, value: rate ?? 0, unit: '%', delta: null, upIsGood: true, pct: true,
-      denom: slots.n ? `${slots.n}자리 중 ${slots.filled ?? 0}자리 채움` : '요청한 자리 없음', small: slots.n > 0 && slots.n < 5 },
-    { key: 'temp', label: '임시 인원 비율', value: tempShare, unit: '%', delta: d(tempShare, prevTemp), upIsGood: false, pct: true,
-      denom: `${now.workers}명 중 ${now.temps}명`, small: now.workers > 0 && now.workers < 5 },
   ];
 
   const byLineRows = db.prepare(`SELECT po.code, AVG(c) avg, COUNT(*) boards FROM (
