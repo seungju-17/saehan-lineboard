@@ -10,7 +10,7 @@ type Data = {
   assignments: { date: string; shift: string; status: string; factory: string; post: string; product: string | null }[];
   messages: { id: number; kind: string; body: string; link: string | null; channel: string; sent_at: string; read_at: string | null }[];
   openRequests: { token: string; expires_at: string | null; date: string; shift: string; factory: string; post: string; product: string | null }[];
-  week: { from: string; to: string; shifts: number; hours: number; max: number; shiftHours: number };
+  week: { from: string; to: string; shifts: number; hours: number; plannedShifts: number; plannedHours: number; max: number; shiftHours: number };
   attendance: { date: string; shift: string; kind: string; note: string | null }[];
   leaves: { id: number; date: string; shift: string; kind: string; note: string | null; status: string; reply: string | null }[];
   workDays: { date: string; shift: string; factory: string; post: string }[];
@@ -102,7 +102,8 @@ export function MyWork({ token }: { token?: string }): React.ReactElement {
           </section>
           <section>
             <div className="text-sm font-semibold text-ink-2 mb-1">이번 주</div>
-            <div className="text-[15px]">{d.week.shifts}교대 · <b>{d.week.hours}시간</b> <span className="text-ink-3">/ 최대 {d.week.max}시간 ({fmtShort(d.week.from)}~{fmtShort(d.week.to)})</span></div>
+            <div className="text-[15px]">지금까지 {d.week.shifts}교대 · <b>{d.week.hours}시간</b> <span className="text-ink-3">/ 기준 {d.week.max}시간</span></div>
+            <div className="text-[13px] text-ink-3">{fmtShort(d.week.from)}~{fmtShort(d.week.to)} 예정까지 더하면 {d.week.plannedShifts}교대 · {d.week.plannedHours}시간</div>
             <div className="mt-1.5 h-2 rounded bg-chip overflow-hidden"><div className="h-full rounded" style={{ width: `${Math.min(100, (d.week.hours / d.week.max) * 100)}%`, background: d.week.hours >= d.week.max ? '#c8362b' : '#2b63d9' }} /></div>
           </section>
           <ul className="divide-y divide-line">

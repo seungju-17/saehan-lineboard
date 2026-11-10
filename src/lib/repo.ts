@@ -530,12 +530,15 @@ export function myWork(tok: string, db: DB = getDb()) {
     LEFT JOIN board_posts bp ON bp.board_id=r.board_id AND bp.post_id=r.post_id WHERE r.person_id=? AND r.status='발송' ORDER BY r.sent_at DESC`).all(p.id) as { token: string; expires_at: string | null; date: string; shift: Shift; factory_id: number; post: string; product: string | null }[];
   const st = getSettings(db);
   const w = weekRange(today);
-  const weekShifts = (db.prepare('SELECT COUNT(DISTINCT b.date || b.shift) c FROM assignments a JOIN boards b ON b.id=a.board_id WHERE a.person_id=? AND b.date BETWEEN ? AND ?').get(p.id, w.from, w.to) as { c: number }).c;
+  // 이번 주: 오늘까지 선 교대(지금까지)와 주 전체 예정(받아 둔 표 포함)을 따로 센다
+  const weekShifts = (db.prepare('SELECT COUNT(DISTINCT b.date || b.shift) c FROM assignments a JOIN boards b ON b.id=a.board_id WHERE a.person_id=? AND b.date BETWEEN ? AND ?').get(p.id, w.from, today) as { c: number }).c;
+  const weekPlanned = (db.prepare('SELECT COUNT(DISTINCT b.date || b.shift) c FROM assignments a JOIN boards b ON b.id=a.board_id WHERE a.person_id=? AND b.date BETWEEN ? AND ?').get(p.id, w.from, w.to) as { c: number }).c;
   // 달력은 지난 1년치 근무·근태를 보여 준다 (체험판은 2025년 표를 옮긴 기록이 그대로 보인다)
   const attendance = db.prepare('SELECT date, shift, kind, note FROM attendance WHERE person_id=? AND date>=? ORDER BY date DESC, shift').all(p.id, addDays(today, -400)) as { date: string; shift: Shift; kind: string; note: string | null }[];
   const leaves = myLeaves(p.id, db).map((l) => ({ id: l.id, date: l.date, shift: l.shift, kind: l.kind, note: l.note, status: l.status, reply: l.reply }));
-  const workDays = (db.prepare(`SELECT b.date, b.shift, b.factory_id, po.name AS post FROM assignments a JOIN boards b ON b.id=a.board_id JOIN posts po ON po.id=a.post_id
-    WHERE a.person_id=? AND b.date>=? ORDER BY b.date, b.shift`).all(p.id, addDays(today, -400)) as { date: string; shift: Shift; factory_id: number; post: string }[])
+  // 한 교대에 여러 라인을 같이 봐도 근무일은 하루 한 번만 센다
+  const workDays = (db.prepare(`SELECT b.date, b.shift, b.factory_id, MIN(po.name) AS post FROM assignments a JOIN boards b ON b.id=a.board_id JOIN posts po ON po.id=a.post_id
+    WHERE a.person_id=? AND b.date>=? GROUP BY b.date, b.shift, b.factory_id ORDER BY b.date, b.shift`).all(p.id, addDays(today, -400)) as { date: string; shift: Shift; factory_id: number; post: string }[])
     .map((w) => ({ date: w.date, shift: w.shift, factory: facs.get(w.factory_id) ?? '', post: w.post }));
   const g = groupsOn(today);
   const dayType = p.work_type === '교대' && ['A', 'B', 'C'].includes(p.grp) ? (p.grp === g.day ? '주간' : p.grp === g.night ? '야간' : '휴무') : p.work_type;
@@ -545,7 +548,7 @@ export function myWork(tok: string, db: DB = getDb()) {
     assignments: rows.map((r) => ({ ...r, factory: facs.get(r.factory_id) ?? '' })),
     messages,
     openRequests: open.map((r) => ({ ...r, factory: facs.get(r.factory_id) ?? '' })),
-    week: { from: w.from, to: w.to, shifts: weekShifts, hours: weekShifts * st.shift_hours, max: st.week_max_hours, shiftHours: st.shift_hours },
+    week: { from: w.from, to: w.to, shifts: weekShifts, hours: weekShifts * st.shift_hours, plannedShifts: weekPlanned, plannedHours: weekPlanned * st.shift_hours, max: st.week_max_hours, shiftHours: st.shift_hours },
     attendance, leaves, workDays,
   };
 }
