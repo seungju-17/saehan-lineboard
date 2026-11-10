@@ -152,7 +152,7 @@ export function App(): React.ReactElement {
       <div className="flex-1 lg:flex">
         <Nav />
         <div className="flex-1 min-w-0">
-          <div className="lb-no-print bg-brand-soft text-brand text-[13px]"><div className="px-4 sm:px-6 lg:px-8 py-1.5 flex flex-wrap items-center gap-x-2"><span className="font-semibold">브라우저 안에서 그대로 실행 중</span><span className="text-brand/80">2025년 8~11월 실제 표와 2026년 11월 예시 월 근무표가 들어 있고 체험판의 「오늘」은 {fmtKo(todaySeoul())}입니다. 11월 말까지는 받아 둔 표가 초안으로 들어 있고, 12월은 설정 → 「월 근무표 올리기」에 예시 파일을 올려 볼 수 있습니다. 새로고침하면 처음 상태로 돌아갑니다. 「나가기」로 역할을 바꿀 수 있습니다.</span></div></div>
+          <div className="lb-no-print bg-brand-soft text-brand text-[13px]"><div className="px-4 sm:px-6 lg:px-8 py-1.5 flex flex-wrap items-center gap-x-2"><span className="font-semibold">브라우저 안에서 그대로 실행 중</span><span className="text-brand/80">2025년 8~11월 실제 표와 2026년 11월 예시 월 근무표가 들어 있고 체험판의 「오늘」은 {fmtKo(todaySeoul())}입니다. 11월 말까지는 받아 둔 표가 초안으로 들어 있고, 12월은 설정에서 생산 계획 예시를 올린 뒤 「월 근무표」에서 「이 달 근무표 짜기」로 채워 볼 수 있습니다. 새로고침하면 처음 상태로 돌아갑니다. 「나가기」로 역할을 바꿀 수 있습니다.</span></div></div>
           <main className="px-4 sm:px-6 lg:px-8 py-5 sm:py-6 pb-24 max-w-[1280px]">{page}</main>
         </div>
       </div>
