@@ -114,7 +114,7 @@ export function Board(): React.ReactElement {
     if (!d) return;
     const r = d as BoardT & { filled: number; vacant: { code: string; missing: number }[]; unplaced: string[] };
     const v = r.vacant.length ? ` 못 채운 자리: ${r.vacant.map((x) => `${x.code} ${x.missing}명`).join(', ')} → 「빈 자리 요청 보내기」로 쉬는 조에 요청하세요.` : '';
-    const u = r.unplaced.length ? ` 자리 없는 출근자: ${r.unplaced.join(', ')}.` : '';
+    const u = r.unplaced.length ? ` 자리 없는 출근자 ${r.unplaced.length}명: ${r.unplaced.join(', ')} → 라인을 더 돌리거나 「+」로 직접 넣으세요.` : '';
     setFlash(r.filled === 0 ? (r.vacant.length ? `채울 출근자가 없습니다.${v}` : '채울 빈 자리가 없습니다. 제품이나 필요 인원을 먼저 적어 주세요.') : `${r.filled}명을 자동 배치했습니다.${v}${u}`);
   }
 

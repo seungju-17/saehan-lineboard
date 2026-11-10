@@ -11,7 +11,7 @@ import { typicalHeadcount } from './engine';
  *  점수: 직책은 늘 맡던 사람, 라인 숙련·경험, 같은 제품 경험, 이번 달 야간·주말·배치 횟수가 많으면 감점(형평).
  *  mode 'fill'은 빈 자리만 채우고, 'redo'는 자동으로 넣었던 자리를 지우고 다시 짠다. 사람이 직접 넣은 자리와 확정된 표는 건드리지 않는다. */
 export type GenResult = { boards: number; filled: number; vacant: { date: string; shift: Shift; code: string; missing: number }[]; unplaced: { date: string; shift: Shift; names: string[] }[] };
-/** 남는 근무조 인원은 「기타」 자리로 들어가므로 unplaced는 기타 자리가 없는 공장에서만 채워진다. */
+/** unplaced: 라인이 다 차서 자리가 없는 근무조 출근자. 표에 넣지 않고 알리기만 한다. */
 
 type Ctx = { settings: ReturnType<typeof getSettings>; people: Person[]; rules: Map<number, UnavailRow[]>; skills: Map<number, Map<number, '불가' | '가능' | '숙련'>>; experience: ReturnType<typeof aggregateExperience>; fixedPref: Map<number, Map<number, number>> };
 
@@ -118,12 +118,10 @@ export function generateDay(boardId: number, mode: 'fill' | 'redo', db: DB = get
     }
     if (missing > 0) vacant.push({ code: po.code, missing });
   }
-  // 라인이 다 찼는데 남은 이 공장 근무조 인원은 「기타」(교육·선별·지원)에 둔다. 출근은 하니 표에는 있어야 한다.
-  const leftover = pool.filter((p) => !used.has(p.id) && p.work_type === '교대' && p.grp === onDuty && home.get(p.id) === b.factory_id);
-  const etc = posts.find((po) => po.kind === 'etc');
-  if (etc) for (const p of leftover) { insert.run(boardId, etc.id, p.id, `${p.grp}조 ${b.shift} · 라인 배정 없음 → 선별·교육·지원`); used.add(p.id); filled++; }
-  const unplaced = etc ? [] : leftover.map((p) => p.name);
-  db.prepare("INSERT INTO logs (board_id, action, detail) VALUES (?, '자동배치', ?)").run(boardId, `${filled}명, 못 채움 ${vacant.length}자리`);
+  // 라인이 다 찼는데 남은 이 공장 근무조 인원은 표에 넣지 않고 「자리 없는 출근자」로 알린다.
+  // (「기타」에는 생산 계획에 기타 인원을 적어 둔 만큼만 위에서 채운다.) 담당자가 라인을 더 돌리거나 직접 넣어 정한다.
+  const unplaced = pool.filter((p) => !used.has(p.id) && p.work_type === '교대' && p.grp === onDuty && home.get(p.id) === b.factory_id).map((p) => p.name);
+  db.prepare("INSERT INTO logs (board_id, action, detail) VALUES (?, '자동배치', ?)").run(boardId, `${filled}명, 못 채움 ${vacant.length}자리, 자리 없는 출근자 ${unplaced.length}명`);
   return { filled, vacant, unplaced };
 }
 

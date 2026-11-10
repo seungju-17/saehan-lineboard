@@ -36,7 +36,9 @@ export function MonthBoard(): React.ReactElement {
     else {
       const g = d as GenResult;
       const v = g.vacant.length ? ` 못 채운 자리 ${g.vacant.length}곳: ${g.vacant.slice(0, 6).map((x) => `${+x.date.slice(8, 10)}일 ${x.shift} ${x.code} ${x.missing}명`).join(', ')}${g.vacant.length > 6 ? ' …' : ''} → 그날 표에서 「빈 자리 요청 보내기」.` : '';
-      setFlash(g.boards === 0 ? '짤 표가 없습니다. 설정 → 「월 근무표·생산 계획 올리기」로 이 달 생산 계획(날짜·교대·공장·라인·제품·인원)을 먼저 올려 주세요.' : `표 ${g.boards}개에 ${g.filled}명을 배치했습니다.${v}`);
+      const un = g.unplaced.reduce((t, x) => t + x.names.length, 0);
+      const uTxt = un ? ` 라인이 다 차서 자리 없는 출근자 ${un}명분(날짜별 표에서 확인).` : '';
+      setFlash(g.boards === 0 ? '짤 표가 없습니다. 설정 → 「월 근무표·생산 계획 올리기」로 이 달 생산 계획(날짜·교대·공장·라인·제품·인원)을 먼저 올려 주세요.' : `표 ${g.boards}개에 ${g.filled}명을 배치했습니다.${v}${uTxt}`);
     }
     await load();
   }
