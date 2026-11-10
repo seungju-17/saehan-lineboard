@@ -4,6 +4,7 @@ import { type AttendanceKind, type Settings, getSettings, setSettings, setNeed, 
 import { currentShiftSeoul, todaySeoul, type Shift } from '../src/lib/shift';
 import type { LeaveKind } from '../src/lib/rules';
 import { getStats } from '../src/lib/stats';
+import { importMonth, type MonthRow } from '../src/lib/month-import';
 import { ask, makeClient, explainApiError, type ChatMessage } from '../src/lib/assistant';
 
 const json = (data: unknown, status = 200): Response => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -45,6 +46,11 @@ async function handle(url: string, init?: RequestInit): Promise<Response> {
         default: return json({ error: 'unknown action' }, 400);
       }
       return json({ ...getBoard(date, shift, factory), ...extra });
+    }
+    if (path === '/api/import/month') {
+      const rows = Array.isArray(body.rows) ? body.rows as MonthRow[] : [];
+      if (!rows.length) return json({ error: '올릴 줄이 없습니다' }, 400);
+      return json(importMonth(rows, { today: todaySeoul() }));
     }
     if (path === '/api/stats') {
       const factory = Number(u.searchParams.get('factory') ?? 2), date = u.searchParams.get('date') ?? todaySeoul();

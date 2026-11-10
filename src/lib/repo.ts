@@ -33,10 +33,13 @@ export function people(db: DB = getDb(), activeOnly = true): PersonRow[] {
 }
 export function findOrCreatePerson(name: string, factoryId: number | null, db: DB = getDb()): { id: number; created: boolean } {
   const clean = name.replace(/\s+/g, '');
-  const row = db.prepare('SELECT id FROM people WHERE replace(name," ","")=? AND active=1 ORDER BY (work_type<>\'임시\') DESC LIMIT 1').get(clean) as { id: number } | undefined;
+  const row = db.prepare("SELECT id FROM people WHERE replace(name,' ','')=? AND active=1 ORDER BY (work_type<>'임시') DESC LIMIT 1").get(clean) as { id: number } | undefined;
   if (row) return { id: row.id, created: false };
   const r = db.prepare('INSERT INTO people (name, grp, work_type, role, home_factory_id) VALUES (?, \'미정\', \'임시\', \'미정\', ?)').run(clean, factoryId);
   return { id: Number(r.lastInsertRowid), created: true };
+}
+export function listPosts(db: DB = getDb()): { factory: number; code: string; name: string }[] {
+  return (db.prepare('SELECT factory_id factory, code, name FROM posts ORDER BY factory_id, sort').all() as { factory: number; code: string; name: string }[]);
 }
 export function ensureToken(personId: number, db: DB = getDb()): string {
   const r = db.prepare('SELECT token FROM people WHERE id=?').get(personId) as { token: string | null };
@@ -145,8 +148,9 @@ export function setSettings(patch: Partial<Settings>, db: DB = getDb()): Setting
   return getSettings(db);
 }
 /** 이번 주(월~일) 사람별 근무시간. 배치된 교대 수 × 한 교대 시간. 공장 구분 없이 센다. */
+/** 이번 주(월~일) 그날까지 선 교대 수 × 교대 시간. 그날 뒤에 잡힌 표(받아 둔 월 근무표)는 아직 선 게 아니므로 세지 않는다. */
 export function weekHoursFor(date: string, db: DB = getDb(), shiftHours = getSettings(db).shift_hours): Map<number, number> {
-  const w = weekRange(date);
+  const w = { from: weekRange(date).from, to: date };
   const out = new Map<number, number>();
   for (const r of db.prepare('SELECT a.person_id, COUNT(DISTINCT b.date || b.shift) c FROM assignments a JOIN boards b ON b.id=a.board_id WHERE b.date BETWEEN ? AND ? GROUP BY a.person_id').all(w.from, w.to) as { person_id: number; c: number }[]) out.set(r.person_id, r.c * shiftHours);
   return out;

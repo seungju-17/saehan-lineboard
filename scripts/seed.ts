@@ -11,6 +11,8 @@ import { openDb } from '../src/lib/db';
 const ROOT = path.resolve(__dirname, '..');
 const DB_FILE = process.env.LINEBOARD_DB ?? path.join(ROOT, 'data', 'lineboard.db');
 const CUTOFF = process.argv[2] ?? new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+/** PLAN_UNTIL(선택): cutoff부터 이 날짜까지의 표는 '받아 둔 월 근무표'로 넣는다. 상태는 초안이라 그날 아침에 고치고 입안·확정한다. */
+const PLAN_UNTIL = process.argv[3] ?? (() => { const y = +CUTOFF.slice(0, 4), m = +CUTOFF.slice(5, 7); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); })(); // 기본: cutoff 달의 말일
 // 날짜는 옮기지 않는다. 2025년 자료는 2025년 날짜 그대로 이력이 된다. (체험판은 build 때 cutoff 2025-12-01 로 따로 시드한다)
 const SHIFT_DAYS = Number(process.env.SEED_SHIFT_DAYS ?? 0);
 
@@ -75,12 +77,14 @@ const mapF1 = (line: string): string => /^\d\d$/.test(line) || ['B-1', 'B-2', 'P
 const mapF2 = (line: string): string => { const m = line.match(/^([SP])-(\d)/); if (m) return `${m[1]}-${m[2]}`; return ['밴딩,박스,운반', '설비관리', '생산관리'].includes(line) ? line : '기타'; };
 type Row = { fac: number; date: string; shift: string; post: number; product: string | null; name: string };
 const rows: Row[] = [];
-for (const [file, fac, mapper] of [['f1_assignments.csv', 1, mapF1], ['f1_assignments_2025_11.csv', 1, mapF1], ['f2_assignments.csv', 2, mapF2]] as const) {
+// 2026년 11월 예시 월 근무표(example_2026_11.csv)는 공장 열이 있어 줄마다 공장을 읽는다
+for (const [file, fac0] of [['f1_assignments.csv', 1], ['f1_assignments_2025_11.csv', 1], ['f2_assignments.csv', 2], ['example_2026_11.csv', 0]] as const) {
   for (const r of csv(path.join(ROOT, 'data', file))) {
+    const fac = fac0 || Number(r['factory']); const mapper = fac === 1 ? mapF1 : mapF2;
     const name = r['name'].replace(/\s+/g, '');
     if (!name || ['가동', '부동', '대기'].includes(name) || name.length > 12) continue;
     const date = shiftDate(r['date']);
-    if (date >= CUTOFF) continue;
+    if (date >= CUTOFF && !(PLAN_UNTIL && date <= PLAN_UNTIL)) continue;
     rows.push({ fac, date, shift: r['shift'], post: postId.get(`${fac}|${mapper(r['line'])}`)!, product: r['product']?.trim() || null, name });
   }
 }
@@ -92,7 +96,9 @@ for (const [name, m] of cnt) if (!personId.has(name)) {
   const fac = [...m.entries()].sort((a, b) => b[1] - a[1])[0][0];
   personId.set(name, Number(insPerson.run(name, '새한', '미정', '임시', '미정', null, fac, '임시').lastInsertRowid)); temps++;
 }
-const insBoard = db.prepare("INSERT OR IGNORE INTO boards (date, shift, factory_id, status) VALUES (?,?,?,'확정')");
+const insBoard0 = db.prepare('INSERT OR IGNORE INTO boards (date, shift, factory_id, status) VALUES (?,?,?,?)');
+// 지난 날은 확정된 이력, cutoff부터는 받아 둔 월 근무표(초안)
+const insBoard = { run: (date: string, shift: string, fac: number) => insBoard0.run(date, shift, fac, date < CUTOFF ? '확정' : '초안') };
 const getBoard = db.prepare('SELECT id FROM boards WHERE date=? AND shift=? AND factory_id=?');
 const insBP = db.prepare('INSERT INTO board_posts (board_id, post_id, product) VALUES (?,?,?) ON CONFLICT(board_id, post_id) DO UPDATE SET product=COALESCE(excluded.product, product)');
 const insA = db.prepare("INSERT OR IGNORE INTO assignments (board_id, post_id, person_id, source) VALUES (?,?,?,'이력')");
@@ -112,7 +118,7 @@ for (const b of db.prepare('SELECT id FROM boards WHERE factory_id=2').all() as 
 const stat = db.prepare('SELECT (SELECT COUNT(*) FROM people) p, (SELECT COUNT(*) FROM boards) b, (SELECT COUNT(*) FROM assignments) a, (SELECT MAX(date) FROM boards) d').get();
 // 이력 표는 결원 판정 대상이 아니다: 필요 인원을 실제 들어간 인원으로 맞춰 「비어 있음」이 뜨지 않게 한다
 db.prepare('UPDATE board_posts SET need=(SELECT COUNT(DISTINCT a.person_id) FROM assignments a WHERE a.board_id=board_posts.board_id AND a.post_id=board_posts.post_id)').run();
-console.log('seeded', DB_FILE, stat, 'temps', temps, 'roster new/upd', rosterNew, rosterUpd, 'cutoff', CUTOFF);
+console.log('seeded', DB_FILE, stat, 'temps', temps, 'roster new/upd', rosterNew, rosterUpd, 'cutoff', CUTOFF, 'plan until', PLAN_UNTIL || '(없음)');
 
 // 체험용 전화번호와 기본 관리자 계정. 실제 번호는 직원 화면에서 넣는다.
 db.prepare("UPDATE people SET phone = '010-' || substr('0000' || (5000 + id), -4) || '-' || substr('0000' || ((id * 7919) % 9000 + 1000), -4) WHERE phone IS NULL OR phone=''").run();

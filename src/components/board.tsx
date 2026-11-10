@@ -111,7 +111,7 @@ export function Board(): React.ReactElement {
     const left = (r.short ?? []).map((x) => `${x.code} ${x.missing}명`).join(', ');
     setFlash(r.filled === 0
       ? (r.need === 0 ? '채울 자리가 없습니다' : `넣을 수 있는 사람이 없습니다 · 못 채운 라인: ${left}. 「+」로 직접 넣으세요.`)
-      : `${r.lines}개 라인에 ${r.filled}명을 넣었습니다.${left ? ` 못 채운 라인: ${left}. 「+」로 직접 넣으세요.` : ' 확인 후 확정하세요.'}`);
+      : `${r.lines}개 라인에 ${r.filled}명을 넣었습니다.${left ? ` 못 채운 라인: ${left}. 「+」로 직접 넣으세요.` : ' 확인 후 입안하세요.'}`);
   }
   async function confirm(): Promise<void> {
     if (!(await ask(`${total}명에게 알림을 보냅니다.`))) return;

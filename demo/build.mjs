@@ -26,9 +26,10 @@ const css = fs.readFileSync(abs('demo/dist/demo.css'), 'utf8');
 const sqljs = fs.readFileSync(abs('node_modules/sql.js/dist/sql-wasm.js'), 'utf8');
 const wasm = fs.readFileSync(abs('node_modules/sql.js/dist/sql-wasm.wasm')).toString('base64');
 // 체험판의 「오늘」: 2025년 자료를 날짜 그대로 쓰므로 자료가 끝난 다음 날을 오늘로 본다. 그 이후 표는 넣지 않는다.
-const DEMO_TODAY = process.env.DEMO_TODAY ?? '2025-12-01';
+const DEMO_TODAY = process.env.DEMO_TODAY ?? '2026-11-10'; // 화요일, C조 주간·B조 야간·A조 휴무
+const DEMO_PLAN = process.env.DEMO_PLAN ?? '2026-11-30'; // 2026년 11월 예시 월 근무표를 받아 둔 표(초안)로 넣는다
 let dbFile = process.env.LINEBOARD_DB;
-if (!dbFile) { dbFile = abs('demo/dist/demo.db'); execSync(`npx tsx scripts/seed.ts ${DEMO_TODAY}`, { cwd: ROOT, stdio: 'inherit', env: { ...process.env, LINEBOARD_DB: dbFile } }); }
+if (!dbFile) { dbFile = abs('demo/dist/demo.db'); execSync(`npx tsx scripts/seed.ts ${DEMO_TODAY} ${DEMO_PLAN}`, { cwd: ROOT, stdio: 'inherit', env: { ...process.env, LINEBOARD_DB: dbFile } }); }
 const db = fs.readFileSync(dbFile).toString('base64');
 
 const html = `<title>새한프라텍 인원 배치</title>

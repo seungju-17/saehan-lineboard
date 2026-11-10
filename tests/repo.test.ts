@@ -283,13 +283,14 @@ describe('설정', () => {
     const diff = (Date.parse(r!.expires_at.replace(' ', 'T') + 'Z') - Date.now()) / 60000;
     expect(diff).toBeGreaterThan(40); expect(diff).toBeLessThanOrEqual(45);
   });
-  it('이번 주 근무시간은 월~일 배치된 교대 수 × 12시간', () => {
+  it('이번 주 근무시간은 월요일부터 그날까지 선 교대 수 × 12시간', () => {
     const db = memDb();
     // 10-19(월)~10-25(일): 박현주 10-20 주간 1회 → 12시간, 최상진 1회
     expect(weekHoursFor('2026-10-21', db).get(1)).toBe(12);
-    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (3,'2026-10-22','야간',2,'확정'),(4,'2026-10-18','주간',2,'확정')").run();
-    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (3,36,1,'이력'),(4,36,1,'이력')").run();
-    expect(weekHoursFor('2026-10-21', db).get(1)).toBe(24); // 10-18은 지난주
+    db.prepare("INSERT INTO boards (id, date, shift, factory_id, status) VALUES (3,'2026-10-22','야간',2,'확정'),(4,'2026-10-18','주간',2,'확정'),(5,'2026-10-21','주간',2,'초안')").run();
+    db.prepare("INSERT INTO assignments (board_id, post_id, person_id, source) VALUES (3,36,1,'이력'),(4,36,1,'이력'),(5,36,1,'이력')").run();
+    expect(weekHoursFor('2026-10-21', db).get(1)).toBe(24); // 10-18은 지난주, 10-22는 아직 안 선 날(받아 둔 표)
+    expect(weekHoursFor('2026-10-22', db).get(1)).toBe(36);
   });
 });
 
